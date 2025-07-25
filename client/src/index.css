@@ -1,1 +1,54 @@
 @import "tailwindcss";
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f1f1;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #a8a8a8;
+}
+
+/* Smooth transitions for all elements */
+* {
+  transition: color 0.2s ease, background-color 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
+}
+
+/* Focus styles for better accessibility */
+input:focus,
+button:focus,
+a:focus {
+  outline: 2px solid transparent;
+  outline-offset: 2px;
+}
+
+/* Custom input placeholder styles */
+input::placeholder {
+  color: #9ca3af;
+  opacity: 1;
+}
+
+/* Smooth hover effects for buttons */
+button {
+  transition: all 0.2s ease-in-out;
+}
+
+/* Custom animation for form validation errors */
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-4px); }
+  75% { transform: translateX(4px); }
+}
+
+.shake {
+  animation: shake 0.3s ease-in-out;
+}

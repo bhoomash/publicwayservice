@@ -1,26 +1,33 @@
-# from fastapi import FastAPI
-# from app import complaint_routes
-# from app.routesf.auth import auth_router 
-
-# app = FastAPI(title="GrievanceBot API")
-# app.include_router(complaint_routes.router)
-# app.include_router(auth_router)
 from fastapi import FastAPI
-from app.complain_routes import router as complaint_router
-from app.routesf.auth import auth_router
 from fastapi.middleware.cors import CORSMiddleware
+from .auth_routes import router as auth_router
 
-app = FastAPI(title="GrievanceBot API")
+app = FastAPI(
+    title="Government Portal API",
+    description="Authentication API for Government Portal",
+    version="1.0.0"
+)
 
-# Allow frontend (React) to access backend (FastAPI)
+# CORS middleware - Allow frontend to access backend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=["http://localhost:5173", "http://localhost:3000"],  # React dev servers
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Register routes
-app.include_router(complaint_router)
+# Include authentication routes
 app.include_router(auth_router)
+
+@app.get("/")
+async def root():
+    return {
+        "message": "Government Portal API",
+        "status": "running",
+        "docs": "/docs"
+    }
+
+@app.get("/health")
+async def health_check():
+    return {"status": "healthy"}

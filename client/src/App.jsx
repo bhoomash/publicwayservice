@@ -15,26 +15,26 @@
 // export default App
 
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom';
-import Home from './pages/Home';
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+
 import Login from './pages/Login';
 import Register from './pages/Register';
+import ForgotPassword from './pages/ForgotPassword';
 import './App.css';
 
 function App() {
-  const token = localStorage.getItem('token');
-
-  const handleLogout = () => {
-    localStorage.removeItem('token');
-    window.location.reload();
-  };
-
-   return (
+  return (
     <Router>
       <Routes>
-        <Route path="/" element={<Home />} />
+        <Route path="/" element={<Login/>} />
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
+        {/* Add protected routes here later */}
+        <Route path="/dashboard" element={<div className="p-8 text-center">
+          <h1 className="text-2xl font-bold">Dashboard</h1>
+          <p>You are logged in!</p>
+        </div>} />
       </Routes>
     </Router>
   );
