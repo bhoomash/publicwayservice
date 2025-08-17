@@ -1,11 +1,15 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from .auth_routes import router as auth_router
+from .complaint_routes import router as complaint_router
+from .notification_routes import router as notification_router
+from .chat_routes import router as chat_router
+from .admin_routes import router as admin_router
 
 app = FastAPI(
-    title="Government Portal API",
-    description="Authentication API for Government Portal",
-    version="1.0.0"
+    title="GrievanceBot API", 
+    description="AI-powered Government Complaint Management System",
+    version="2.0.0"
 )
 
 # CORS middleware - Allow frontend to access backend
@@ -17,8 +21,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Include authentication routes
+# Include all route modules
 app.include_router(auth_router)
+app.include_router(complaint_router)
+app.include_router(notification_router)
+app.include_router(chat_router)
+app.include_router(admin_router)
 
 @app.get("/")
 async def root():

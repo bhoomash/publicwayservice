@@ -8,6 +8,11 @@ db = client[DB_NAME]
 users_collection = db["users"]
 otp_collection = db["otp_codes"]
 complaints_collection = db["complaints"]
+admin_notes_collection = db["admin_notes"]
+
+def get_database():
+    """Get database instance"""
+    return db
 
 # Create indexes for better performance (only if they don't exist)
 try:

@@ -28,7 +28,7 @@ class UserInDB(BaseModel):
     last_name: str
     email: str
     phone: str
-    hashed_password: str
+    password: str
     is_verified: bool = False
     created_at: datetime
     updated_at: datetime
@@ -55,6 +55,17 @@ class Token(BaseModel):
 class TokenData(BaseModel):
     email: Optional[str] = None
 
+# User model for database operations
+class User(BaseModel):
+    id: Optional[str] = None
+    first_name: str
+    last_name: str
+    email: str
+    phone: str
+    is_verified: bool = False
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
 # Password Reset Models
 class PasswordResetRequest(BaseModel):
     email: EmailStr
@@ -71,3 +82,32 @@ class Complaint(BaseModel):
     message: str
     language: Optional[str] = "english"
     status: Optional[str] = "pending"
+
+# Profile Update Models
+class Address(BaseModel):
+    street: Optional[str] = None
+    city: Optional[str] = None
+    state: Optional[str] = None
+    pincode: Optional[str] = None
+
+class ProfileUpdate(BaseModel):
+    first_name: Optional[str] = Field(None, min_length=1, max_length=50)
+    last_name: Optional[str] = Field(None, min_length=1, max_length=50)
+    phone: Optional[str] = Field(None, min_length=10, max_length=15)
+    address: Optional[Address] = None
+    profile_picture: Optional[str] = None
+    bio: Optional[str] = Field(None, max_length=500)
+
+class PasswordChange(BaseModel):
+    current_password: str = Field(..., min_length=1)
+    new_password: str = Field(..., min_length=8)
+
+class NotificationSettings(BaseModel):
+    email_notifications: Optional[bool] = True
+    sms_notifications: Optional[bool] = True
+    push_notifications: Optional[bool] = True
+
+class PrivacySettings(BaseModel):
+    profile_visibility: Optional[str] = Field("public", pattern="^(public|private|friends)$")
+    contact_visibility: Optional[str] = Field("private", pattern="^(public|private|friends)$")
+    data_sharing: Optional[bool] = False

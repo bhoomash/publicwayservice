@@ -11,7 +11,7 @@ const api = axios.create({
 // Request interceptor to add auth token
 api.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem('access_token');
+    const token = localStorage.getItem('token');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -28,8 +28,9 @@ api.interceptors.response.use(
   (error) => {
     if (error.response?.status === 401) {
       // Token expired or invalid
-      localStorage.removeItem('access_token');
+      localStorage.removeItem('token');
       localStorage.removeItem('user');
+      localStorage.removeItem('userEmail');
       window.location.href = '/login';
     }
     return Promise.reject(error);
@@ -70,7 +71,7 @@ export const authAPI = {
 
   // Get current user info
   getCurrentUser: async () => {
-    const response = await api.get('/auth/me');
+    const response = await api.get('/auth/profile');
     return response.data;
   },
 
@@ -93,8 +94,181 @@ export const authAPI = {
   // Logout
   logout: async () => {
     const response = await api.post('/auth/logout');
-    localStorage.removeItem('access_token');
+    localStorage.removeItem('token');
     localStorage.removeItem('user');
+    localStorage.removeItem('userEmail');
+    return response.data;
+  },
+
+  // Get current user info
+  getCurrentUser: async () => {
+    const response = await api.get('/auth/profile');
+    return response.data;
+  },
+
+  // Update user profile
+  updateProfile: async (profileData) => {
+    const response = await api.put('/auth/profile', profileData);
+    return response.data;
+  },
+
+  // Change password
+  changePassword: async (currentPassword, newPassword) => {
+    const response = await api.post('/auth/change-password', {
+      current_password: currentPassword,
+      new_password: newPassword
+    });
+    return response.data;
+  },
+
+  // Get account settings
+  getAccountSettings: async () => {
+    const response = await api.get('/auth/settings');
+    return response.data;
+  },
+
+  // Update notification settings
+  updateNotificationSettings: async (notifications) => {
+    const response = await api.put('/auth/settings/notifications', notifications);
+    return response.data;
+  },
+
+  // Update privacy settings
+  updatePrivacySettings: async (privacy) => {
+    const response = await api.put('/auth/settings/privacy', privacy);
+    return response.data;
+  },
+
+  // Delete account
+  deleteAccount: async () => {
+    const response = await api.delete('/auth/account');
+    return response.data;
+  },
+};
+
+// Complaints API functions
+export const complaintsAPI = {
+  // Submit new complaint
+  submitComplaint: async (complaintData) => {
+    const response = await api.post('/complaints/new', complaintData);
+    return response.data;
+  },
+
+  // Get user's complaints
+  getMyComplaints: async (filters = {}) => {
+    const params = new URLSearchParams();
+    if (filters.status) params.append('status', filters.status);
+    if (filters.category) params.append('category', filters.category);
+    
+    const response = await api.get(`/complaints/my-complaints?${params}`);
+    return response.data;
+  },
+
+  // Get complaint details
+  getComplaintDetails: async (complaintId) => {
+    const response = await api.get(`/complaints/${complaintId}`);
+    return response.data;
+  },
+
+  // Update complaint status (admin only)
+  updateComplaintStatus: async (complaintId, updates) => {
+    const response = await api.put(`/complaints/${complaintId}/status`, updates);
+    return response.data;
+  },
+
+  // Delete complaint
+  deleteComplaint: async (complaintId) => {
+    const response = await api.delete(`/complaints/${complaintId}`);
+    return response.data;
+  },
+
+  // Get all complaints (collector/admin)
+  getAllComplaints: async (filters = {}) => {
+    const params = new URLSearchParams();
+    if (filters.status) params.append('status', filters.status);
+    if (filters.category) params.append('category', filters.category);
+    if (filters.urgency) params.append('urgency', filters.urgency);
+    if (filters.sortBy) params.append('sort_by', filters.sortBy);
+    
+    const response = await api.get(`/complaints/collector/all?${params}`);
+    return response.data;
+  },
+
+  // Get complaints statistics
+  getComplaintsStats: async () => {
+    const response = await api.get('/complaints/stats');
+    return response.data;
+  },
+
+  // Assign complaint to collector
+  assignCollector: async (complaintId, collectorId) => {
+    const response = await api.put(`/complaints/${complaintId}/assign`, {
+      collector_id: collectorId,
+    });
+    return response.data;
+  },
+};
+
+// Notifications API functions
+export const notificationsAPI = {
+  // Get notifications
+  getNotifications: async (filters = {}) => {
+    const params = new URLSearchParams();
+    if (filters.isRead !== undefined) params.append('is_read', filters.isRead);
+    if (filters.limit) params.append('limit', filters.limit);
+    
+    const response = await api.get(`/notifications?${params}`);
+    return response.data;
+  },
+
+  // Mark notification as read
+  markAsRead: async (notificationId) => {
+    const response = await api.put(`/notifications/${notificationId}/read`);
+    return response.data;
+  },
+
+  // Mark all as read
+  markAllAsRead: async () => {
+    const response = await api.put('/notifications/mark-all-read');
+    return response.data;
+  },
+
+  // Delete notification
+  deleteNotification: async (notificationId) => {
+    const response = await api.delete(`/notifications/${notificationId}`);
+    return response.data;
+  },
+
+  // Get unread count
+  getUnreadCount: async () => {
+    const response = await api.get('/notifications/unread-count');
+    return response.data;
+  },
+};
+
+// Chat/AI Assistant API functions
+export const chatAPI = {
+  // Send message to AI
+  sendMessage: async (message) => {
+    const response = await api.post('/chat/message', { message });
+    return response.data;
+  },
+
+  // Get chat history
+  getChatHistory: async (limit = 20) => {
+    const response = await api.get(`/chat/history?limit=${limit}`);
+    return response.data;
+  },
+
+  // Clear chat history
+  clearHistory: async () => {
+    const response = await api.delete('/chat/history');
+    return response.data;
+  },
+
+  // Get quick responses
+  getQuickResponses: async () => {
+    const response = await api.get('/chat/quick-responses');
     return response.data;
   },
 };
@@ -102,20 +276,22 @@ export const authAPI = {
 // Utility functions
 export const tokenUtils = {
   setToken: (token) => {
-    localStorage.setItem('access_token', token);
+    localStorage.setItem('token', token);
   },
 
   getToken: () => {
-    return localStorage.getItem('access_token');
+    return localStorage.getItem('token');
   },
 
   removeToken: () => {
-    localStorage.removeItem('access_token');
+    localStorage.removeItem('token');
     localStorage.removeItem('user');
+    localStorage.removeItem('userEmail');
   },
 
   setUser: (user) => {
     localStorage.setItem('user', JSON.stringify(user));
+    localStorage.setItem('userEmail', user.email);
   },
 
   getUser: () => {
@@ -124,7 +300,116 @@ export const tokenUtils = {
   },
 
   isAuthenticated: () => {
-    return !!localStorage.getItem('access_token');
+    return !!localStorage.getItem('token');
+  },
+};
+
+// Admin API functions
+export const adminAPI = {
+  // Admin Authentication
+  adminLogin: async (email, password) => {
+    const response = await api.post('/auth/admin-login', { email, password });
+    return response.data;
+  },
+
+  requestAdminOTP: async (email) => {
+    const response = await api.post('/auth/admin-otp-request', { email });
+    return response.data;
+  },
+
+  adminOtpLogin: async (email, otpCode) => {
+    const response = await api.post('/auth/admin-otp-login', { email, otp_code: otpCode });
+    return response.data;
+  },
+
+  // Dashboard Stats
+  getDashboardStats: async (timeFilter = 'today') => {
+    const response = await api.get(`/admin/dashboard-stats?period=${timeFilter}`);
+    return response.data;
+  },
+
+  // Complaints Management
+  getAllComplaints: async () => {
+    const response = await api.get('/admin/complaints');
+    return response.data;
+  },
+
+  getComplaintById: async (complaintId) => {
+    const response = await api.get(`/admin/complaints/${complaintId}`);
+    return response.data;
+  },
+
+  updateComplaintStatus: async (complaintId, status) => {
+    const response = await api.put(`/admin/complaints/${complaintId}/status`, { status });
+    return response.data;
+  },
+
+  assignComplaint: async (complaintId, department) => {
+    const response = await api.put(`/admin/complaints/${complaintId}/assign`, { department });
+    return response.data;
+  },
+
+  addComplaintNote: async (complaintId, note) => {
+    const response = await api.post(`/admin/complaints/${complaintId}/notes`, { note });
+    return response.data;
+  },
+
+  // Departments Management
+  getDepartments: async () => {
+    const response = await api.get('/admin/departments');
+    return response.data;
+  },
+
+  createDepartment: async (departmentData) => {
+    const response = await api.post('/admin/departments', departmentData);
+    return response.data;
+  },
+
+  updateDepartment: async (departmentId, departmentData) => {
+    const response = await api.put(`/admin/departments/${departmentId}`, departmentData);
+    return response.data;
+  },
+
+  deleteDepartment: async (departmentId) => {
+    const response = await api.delete(`/admin/departments/${departmentId}`);
+    return response.data;
+  },
+
+  // Reports and Analytics
+  getReports: async (filters = {}) => {
+    const params = new URLSearchParams(filters);
+    const response = await api.get(`/admin/reports?${params}`);
+    return response.data;
+  },
+
+  exportReport: async (format, filters = {}) => {
+    const params = new URLSearchParams({ ...filters, format });
+    const response = await api.get(`/admin/reports/export?${params}`, {
+      responseType: 'blob'
+    });
+    return response.data;
+  },
+
+  // Notifications
+  getAdminNotifications: async () => {
+    const response = await api.get('/admin/notifications');
+    return response.data;
+  },
+
+  markNotificationRead: async (notificationId) => {
+    const response = await api.put(`/admin/notifications/${notificationId}/read`);
+    return response.data;
+  },
+
+  // Settings
+  getAdminSettings: async () => {
+    const response = await api.get('/admin/settings');
+    return response.data;
+  },
+
+  updateAdminSettings: async (settings) => {
+    const response = await api.put('/admin/settings', settings);
+    return response.data;
   },
 };
 

@@ -1,0 +1,374 @@
+from fastapi import APIRouter, HTTPException, Depends, UploadFile, File
+from typing import List, Optional
+from pydantic import BaseModel
+from datetime import datetime
+import json
+from .models import UserResponse
+from .auth_utils import get_current_user
+from .db import get_database
+from .ai_service import AIService
+from .notification_routes import create_notification
+import uuid
+
+router = APIRouter(prefix="/complaints", tags=["complaints"])
+
+# Pydantic models
+class ComplaintCreate(BaseModel):
+    title: str
+    description: str
+    category: Optional[str] = None
+    location: str
+    contact_phone: str
+    contact_email: str
+    urgency: str = "medium"
+
+class ComplaintUpdate(BaseModel):
+    status: Optional[str] = None
+    assigned_department: Optional[str] = None
+    admin_notes: Optional[str] = None
+
+class ComplaintResponse(BaseModel):
+    id: str
+    user_id: str
+    user_name: str
+    user_email: str
+    title: str
+    description: str
+    category: str
+    location: str
+    contact_phone: str
+    contact_email: str
+    urgency: str
+    status: str
+    priority_score: int
+    assigned_department: str
+    ai_response: str
+    ai_category: str
+    ai_department: str
+    estimated_resolution: str
+    submitted_date: datetime
+    last_updated: datetime
+    attachments: List[str] = []
+
+# Initialize AI service
+ai_service = AIService()
+
+@router.post("/new", response_model=dict)
+async def submit_complaint(
+    complaint: ComplaintCreate,
+    current_user: UserResponse = Depends(get_current_user)
+):
+    """Submit a new complaint with AI processing"""
+    try:
+        db = get_database()
+        complaints_collection = db.complaints
+        
+        # Generate complaint ID
+        complaint_id = f"CMP{uuid.uuid4().hex[:6].upper()}"
+        
+        # AI Processing
+        ai_analysis = await ai_service.analyze_complaint(
+            title=complaint.title,
+            description=complaint.description,
+            urgency=complaint.urgency,
+            location=complaint.location
+        )
+        
+        # Create complaint document
+        complaint_doc = {
+            "id": complaint_id,
+            "user_id": current_user["user_id"],
+            "user_name": current_user["full_name"],
+            "user_email": current_user["email"],
+            "title": complaint.title,
+            "description": complaint.description,
+            "category": ai_analysis["category"],
+            "location": complaint.location,
+            "contact_phone": complaint.contact_phone,
+            "contact_email": complaint.contact_email,
+            "urgency": complaint.urgency,
+            "status": "Pending",
+            "priority_score": ai_analysis["priority_score"],
+            "assigned_department": ai_analysis["assigned_department"],
+            "ai_response": ai_analysis["suggested_response"],
+            "ai_category": ai_analysis["category"],
+            "ai_department": ai_analysis["assigned_department"],
+            "estimated_resolution": ai_analysis["estimated_resolution"],
+            "submitted_date": datetime.utcnow(),
+            "last_updated": datetime.utcnow(),
+            "attachments": [],
+            "status_history": [
+                {
+                    "status": "Pending",
+                    "timestamp": datetime.utcnow(),
+                    "note": "Complaint submitted and processed by AI"
+                }
+            ]
+        }
+        
+        # Insert into database
+        result = complaints_collection.insert_one(complaint_doc)
+        
+        if result.inserted_id:
+            # Create notification
+            await create_notification(
+                user_id=current_user["user_id"],
+                title="Complaint Submitted",
+                message=f"Your complaint {complaint_id} has been submitted and processed by AI.",
+                type="submitted"
+            )
+            
+            return {
+                "success": True,
+                "complaint_id": complaint_id,
+                "ai_summary": {
+                    "category": ai_analysis["category"],
+                    "priority_score": ai_analysis["priority_score"],
+                    "assigned_department": ai_analysis["assigned_department"],
+                    "suggested_response": ai_analysis["suggested_response"],
+                    "estimated_resolution": ai_analysis["estimated_resolution"]
+                }
+            }
+        else:
+            raise HTTPException(status_code=500, detail="Failed to submit complaint")
+            
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error submitting complaint: {str(e)}")
+
+@router.get("/my-complaints", response_model=List[ComplaintResponse])
+async def get_my_complaints(
+    current_user: UserResponse = Depends(get_current_user),
+    status: Optional[str] = None,
+    category: Optional[str] = None
+):
+    """Get current user's complaints"""
+    try:
+        db = get_database()
+        complaints_collection = db.complaints
+        
+        # Build query
+        query = {"user_id": current_user["user_id"]}
+        if status:
+            query["status"] = status
+        if category:
+            query["category"] = category
+        
+        # Fetch complaints
+        complaints_cursor = complaints_collection.find(query).sort("submitted_date", -1)
+        complaints = list(complaints_cursor)
+        
+        # Convert to response format
+        response_complaints = []
+        for complaint in complaints:
+            response_complaints.append(ComplaintResponse(**complaint))
+        
+        return response_complaints
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching complaints: {str(e)}")
+
+@router.get("/{complaint_id}", response_model=ComplaintResponse)
+async def get_complaint_details(
+    complaint_id: str,
+    current_user: UserResponse = Depends(get_current_user)
+):
+    """Get detailed information about a specific complaint"""
+    try:
+        db = get_database()
+        complaints_collection = db.complaints
+        
+        # Find complaint
+        complaint = complaints_collection.find_one({"id": complaint_id})
+        
+        if not complaint:
+            raise HTTPException(status_code=404, detail="Complaint not found")
+        
+        # Check if user owns the complaint (for regular users)
+        if current_user.get("role") != "admin" and complaint["user_id"] != current_user["user_id"]:
+            raise HTTPException(status_code=403, detail="Access denied")
+        
+        return ComplaintResponse(**complaint)
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching complaint: {str(e)}")
+
+@router.put("/{complaint_id}/status")
+async def update_complaint_status(
+    complaint_id: str,
+    update: ComplaintUpdate,
+    current_user: UserResponse = Depends(get_current_user)
+):
+    """Update complaint status (admin only)"""
+    try:
+        # Check if user is admin/collector
+        if current_user.get("role") not in ["admin", "collector"]:
+            raise HTTPException(status_code=403, detail="Admin access required")
+        
+        db = get_database()
+        complaints_collection = db.complaints
+        
+        # Find complaint
+        complaint = complaints_collection.find_one({"id": complaint_id})
+        if not complaint:
+            raise HTTPException(status_code=404, detail="Complaint not found")
+        
+        # Update fields
+        update_fields = {"last_updated": datetime.utcnow()}
+        status_note = ""
+        
+        if update.status:
+            update_fields["status"] = update.status
+            status_note = f"Status updated to {update.status}"
+        
+        if update.assigned_department:
+            update_fields["assigned_department"] = update.assigned_department
+            status_note += f", assigned to {update.assigned_department}"
+        
+        if update.admin_notes:
+            status_note += f", Notes: {update.admin_notes}"
+        
+        # Add to status history
+        if status_note:
+            complaints_collection.update_one(
+                {"id": complaint_id},
+                {
+                    "$push": {
+                        "status_history": {
+                            "status": update.status or complaint["status"],
+                            "timestamp": datetime.utcnow(),
+                            "note": status_note.strip(", "),
+                            "updated_by": current_user["email"]
+                        }
+                    }
+                }
+            )
+        
+        # Update complaint
+        result = complaints_collection.update_one(
+            {"id": complaint_id},
+            {"$set": update_fields}
+        )
+        
+        if result.modified_count > 0:
+            # Create notification for user
+            await create_notification(
+                user_id=complaint["user_id"],
+                title="Complaint Status Updated",
+                message=f"Your complaint {complaint_id} status has been updated: {status_note}",
+                type="status_update"
+            )
+            
+            return {"success": True, "message": "Complaint updated successfully"}
+        else:
+            raise HTTPException(status_code=500, detail="Failed to update complaint")
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error updating complaint: {str(e)}")
+
+@router.delete("/{complaint_id}")
+async def delete_complaint(
+    complaint_id: str,
+    current_user: UserResponse = Depends(get_current_user)
+):
+    """Delete a complaint (user can delete own complaints)"""
+    try:
+        db = get_database()
+        complaints_collection = db.complaints
+        
+        # Find complaint
+        complaint = complaints_collection.find_one({"id": complaint_id})
+        if not complaint:
+            raise HTTPException(status_code=404, detail="Complaint not found")
+        
+        # Check ownership or admin rights
+        if complaint["user_id"] != current_user["user_id"] and current_user.get("role") not in ["admin", "collector"]:
+            raise HTTPException(status_code=403, detail="Access denied")
+        
+        # Delete complaint
+        result = complaints_collection.delete_one({"id": complaint_id})
+        
+        if result.deleted_count > 0:
+            return {"success": True, "message": "Complaint deleted successfully"}
+        else:
+            raise HTTPException(status_code=500, detail="Failed to delete complaint")
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error deleting complaint: {str(e)}")
+
+# Collector/Admin endpoints
+@router.get("/collector/all", response_model=List[ComplaintResponse])
+async def get_all_complaints(
+    current_user: UserResponse = Depends(get_current_user),
+    status: Optional[str] = None,
+    category: Optional[str] = None,
+    urgency: Optional[str] = None,
+    sort_by: str = "priority_score"
+):
+    """Get all complaints for collectors/admins"""
+    try:
+        # Check if user is admin/collector
+        if current_user.get("role") not in ["admin", "collector"]:
+            raise HTTPException(status_code=403, detail="Admin access required")
+        
+        db = get_database()
+        complaints_collection = db.complaints
+        
+        # Build query
+        query = {}
+        if status:
+            query["status"] = status
+        if category:
+            query["category"] = category
+        if urgency:
+            query["urgency"] = urgency
+        
+        # Sort options
+        sort_options = {
+            "priority_score": [("priority_score", -1)],
+            "date": [("submitted_date", -1)],
+            "status": [("status", 1)]
+        }
+        
+        sort_criteria = sort_options.get(sort_by, [("priority_score", -1)])
+        
+        # Fetch complaints
+        complaints_cursor = complaints_collection.find(query).sort(sort_criteria)
+        complaints = list(complaints_cursor)
+        
+        # Convert to response format
+        response_complaints = []
+        for complaint in complaints:
+            response_complaints.append(ComplaintResponse(**complaint))
+        
+        return response_complaints
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching complaints: {str(e)}")
+
+async def create_notification(user_id: str, title: str, message: str, type: str):
+    """Helper function to create notifications"""
+    try:
+        db = get_database()
+        notifications_collection = db.notifications
+        
+        notification = {
+            "id": str(uuid.uuid4()),
+            "user_id": user_id,
+            "title": title,
+            "message": message,
+            "type": type,
+            "is_read": False,
+            "timestamp": datetime.utcnow()
+        }
+        
+        notifications_collection.insert_one(notification)
+    except Exception as e:
+        print(f"Error creating notification: {e}")

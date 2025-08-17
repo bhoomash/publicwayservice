@@ -5,12 +5,16 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from datetime import datetime, timedelta
 from jose import JWTError, jwt
-from fastapi import HTTPException, status
+from fastapi import HTTPException, status, Depends
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from .config import (
     SECRET_KEY, ALGORITHM, ACCESS_TOKEN_EXPIRE_MINUTES,
     SMTP_SERVER, SMTP_PORT, SMTP_USERNAME, SMTP_PASSWORD, FROM_EMAIL,
     OTP_EXPIRE_MINUTES, OTP_LENGTH
 )
+
+# Security scheme for JWT tokens
+security = HTTPBearer()
 
 # Password hashing
 def hash_password(password: str) -> str:
@@ -128,3 +132,45 @@ def send_otp_email(email: str, otp_code: str, purpose: str = "verification"):
 def get_otp_expiry() -> datetime:
     """Get OTP expiry datetime"""
     return datetime.utcnow() + timedelta(minutes=OTP_EXPIRE_MINUTES)
+
+async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    """Get current user from JWT token"""
+    try:
+        # Extract token from credentials
+        token = credentials.credentials
+        
+        # Verify token and get email
+        email = verify_token(token)
+        
+        # Import here to avoid circular imports
+        from .db import get_database
+        
+        # Get database
+        db = get_database()
+        
+        # Find user in database
+        user = db.users.find_one({"email": email})
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="User not found",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        
+        # Convert ObjectId to string
+        user["_id"] = str(user["_id"])
+        
+        return user
+        
+    except JWTError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Could not validate credentials",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=f"Authentication error: {str(e)}",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
