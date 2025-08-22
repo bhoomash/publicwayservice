@@ -64,8 +64,15 @@ const Login = () => {
         const userInfo = await authAPI.getCurrentUser();
         tokenUtils.setUser(userInfo);
         
-        // Redirect to dashboard or home
-        navigate('/dashboard');
+        // Store user role for easier access
+        localStorage.setItem('userRole', userInfo.role || 'citizen');
+        
+        // Redirect based on user role
+        if (userInfo.role === 'admin' || userInfo.is_admin) {
+          navigate('/admin');
+        } else {
+          navigate('/dashboard');
+        }
       } catch (error) {
         console.error('Login error:', error);
         if (error.response?.data?.detail) {

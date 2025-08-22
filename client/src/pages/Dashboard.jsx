@@ -30,7 +30,7 @@ const Dashboard = () => {
     try {
       const user = JSON.parse(localStorage.getItem('user') || '{}');
       if (user.role === 'admin' || user.is_admin) {
-        navigate('/admin/dashboard', { replace: true });
+        navigate('/admin', { replace: true });
         return;
       }
     } catch (error) {

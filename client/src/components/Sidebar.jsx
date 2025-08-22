@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { 
   Home, 
@@ -21,7 +21,23 @@ const Sidebar = ({ isOpen, toggleSidebar, onLogout }) => {
     navigate('/login');
   };
 
-  const menuItems = [
+  const getUserRole = () => {
+    try {
+      const userStr = localStorage.getItem('user');
+      if (userStr && userStr.startsWith('{')) {
+        const user = JSON.parse(userStr);
+        return user.role || (user.is_admin ? 'admin' : 'citizen');
+      }
+      return localStorage.getItem('userRole') || 'citizen';
+    } catch (error) {
+      return 'citizen';
+    }
+  };
+
+  const userRole = getUserRole();
+
+  // Different menu items based on user role
+  const citizenMenuItems = [
     {
       path: '/dashboard',
       icon: Home,
@@ -54,16 +70,18 @@ const Sidebar = ({ isOpen, toggleSidebar, onLogout }) => {
     }
   ];
 
-  // Add admin menu item for admin users
-  const userRole = localStorage.getItem('userRole') || 'user';
+  // For admin users, redirect them to admin panel (this sidebar should not be used for admins)
+  useEffect(() => {
+    if (userRole === 'admin') {
+      navigate('/admin');
+    }
+  }, [userRole, navigate]);
+
   if (userRole === 'admin') {
-    menuItems.splice(1, 0, {
-      path: '/admin',
-      icon: ClipboardList,
-      label: 'Admin Dashboard',
-      description: 'Manage all complaints'
-    });
+    return null;
   }
+
+  const menuItems = citizenMenuItems;
 
   return (
     <>

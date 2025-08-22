@@ -22,3 +22,11 @@ FROM_EMAIL = os.getenv("FROM_EMAIL", SMTP_USERNAME)
 # OTP Configuration
 OTP_EXPIRE_MINUTES = 10
 OTP_LENGTH = 6
+
+# Admin Configuration
+ADMIN_EMAIL = os.getenv("admin_email")
+ADMIN_PASSWORD = os.getenv("admin_password")
+
+# AI API Configuration  
+GROQ_API_KEY = os.getenv("groq_api_key")
+FIREWORKS_API_KEY = os.getenv("fireworks_api_key")

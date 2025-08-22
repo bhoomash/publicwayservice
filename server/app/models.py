@@ -21,6 +21,8 @@ class UserResponse(BaseModel):
     email: str
     phone: str
     is_verified: bool
+    role: str = "citizen"
+    is_admin: bool = False
     created_at: datetime
 
 class UserInDB(BaseModel):
@@ -30,6 +32,8 @@ class UserInDB(BaseModel):
     phone: str
     password: str
     is_verified: bool = False
+    role: str = "citizen"
+    is_admin: bool = False
     created_at: datetime
     updated_at: datetime
 

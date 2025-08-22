@@ -2,10 +2,11 @@ import React, { useState } from 'react';
 import { Menu, Bell, X, ChevronDown } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import Sidebar from './Sidebar';
+import AdminSidebar from './AdminSidebar';
 import ChatBot from './ChatBot';
 import Footer from './Footer';
 
-const Layout = ({ children, title = "Dashboard" }) => {
+const Layout = ({ children, title = "Dashboard", isAdmin = false }) => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const navigate = useNavigate();
@@ -66,12 +67,19 @@ const Layout = ({ children, title = "Dashboard" }) => {
 
   return (
     <div className="h-screen flex bg-gray-50 overflow-hidden">
-      {/* Sidebar */}
-      <Sidebar 
-        isOpen={sidebarOpen} 
-        toggleSidebar={toggleSidebar}
-        onLogout={handleLogout}
-      />
+      {/* Conditional Sidebar */}
+      {isAdmin ? (
+        <AdminSidebar 
+          sidebarOpen={sidebarOpen} 
+          setSidebarOpen={setSidebarOpen}
+        />
+      ) : (
+        <Sidebar 
+          isOpen={sidebarOpen} 
+          toggleSidebar={toggleSidebar}
+          onLogout={handleLogout}
+        />
+      )}
 
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col lg:ml-0 h-full">
@@ -88,7 +96,9 @@ const Layout = ({ children, title = "Dashboard" }) => {
               </button>
               <div>
                 <h1 className="text-xl font-semibold text-gray-900">{title}</h1>
-                <p className="text-sm text-gray-500 hidden sm:block">Welcome to GrievanceBot Portal</p>
+                <p className="text-sm text-gray-500 hidden sm:block">
+                  {isAdmin ? "Admin Management Portal" : "Welcome to GrievanceBot Portal"}
+                </p>
               </div>
             </div>
 
@@ -118,7 +128,7 @@ const Layout = ({ children, title = "Dashboard" }) => {
                   </div>
                   <div className="hidden md:block text-left">
                     <p className="text-sm font-medium text-gray-700">{userName}</p>
-                    <p className="text-xs text-gray-500">Citizen</p>
+                    <p className="text-xs text-gray-500">{isAdmin ? "Admin" : "Citizen"}</p>
                   </div>
                   <ChevronDown size={16} className="text-gray-500" />
                 </button>
@@ -165,12 +175,13 @@ const Layout = ({ children, title = "Dashboard" }) => {
           </div>
         </header>
 
-        {/* Page Content - This will expand and footer will follow naturally */}
-        <main className="flex-1 overflow-y-auto min-h-0">
+        {/* Main Content - All content including footer scrolls together */}
+        <main className="flex-1 overflow-y-auto">
           <div className="p-4 sm:p-6">
             {children}
           </div>
-          {/* Footer - This will appear after content */}
+          
+          {/* Footer appears after all dashboard content */}
           <Footer />
         </main>
       </div>

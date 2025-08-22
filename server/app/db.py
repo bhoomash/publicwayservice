@@ -20,8 +20,9 @@ try:
     existing_indexes = users_collection.list_indexes()
     index_names = [index['name'] for index in existing_indexes]
     
-    if 'email_1' not in index_names:
-        users_collection.create_index("email", unique=True)
+    # Skip email index creation for now due to duplicate data
+    # if 'email_1' not in index_names:
+    #     users_collection.create_index("email", unique=True)
     
     # Create other indexes
     otp_collection.create_index("email")

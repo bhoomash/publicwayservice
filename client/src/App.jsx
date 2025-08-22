@@ -1,19 +1,3 @@
-// import { useState } from 'react'
-// import reactLogo from './assets/react.svg'
-// import viteLogo from '/vite.svg'
-// import './App.css'
-
-// function App() {
-
-//   return (
-//     <>
-//       <h1 className="text-3xl font-bold">Welcome</h1>
-//     </>
-//   )
-// }
-
-// export default App
-
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 
@@ -26,40 +10,98 @@ import SubmitComplaint from './pages/SubmitComplaint';
 import MyComplaints from './pages/MyComplaints';
 import Notifications from './pages/Notifications';
 import Help from './pages/Help';
-import AdminDashboard from './pages/AdminDashboard';
+import AdminDashboard from './pages/admin/AdminDashboard';
+import AllComplaints from './pages/admin/AllComplaints';
+import UserManagement from './pages/admin/UserManagement';
+import Reports from './pages/admin/Reports';
+import Settings from './pages/admin/Settings';
 import ComplaintDetails from './pages/ComplaintDetails';
 import ProfileSettings from './pages/ProfileSettings';
-import AccountSettings from './pages/AccountSettings';
-import AdminLogin from './pages/AdminLogin';
-import AdminComplaints from './pages/AdminComplaints';
-import AdminComplaintDetail from './pages/AdminComplaintDetail';
-import './App.css';
 
-// Protected Route Component
-const ProtectedRoute = ({ children }) => {
-  const token = localStorage.getItem('token');
-  return token ? children : <Navigate to="/login" replace />;
+// Helper function to get user info from localStorage
+const getUserInfo = () => {
+  try {
+    const token = localStorage.getItem('token');
+    const user = localStorage.getItem('user');
+    
+    if (!token || !user) {
+      return null;
+    }
+
+    // Try to parse user data
+    let userData;
+    if (user.startsWith('{')) {
+      userData = JSON.parse(user);
+    } else {
+      // Handle plain email string
+      userData = { email: user };
+    }
+
+    return userData;
+  } catch (error) {
+    console.error('Error parsing user data:', error);
+    return null;
+  }
 };
 
-// Admin Protected Route Component
-const AdminProtectedRoute = ({ children }) => {
+// Check if user is admin
+const isAdmin = () => {
+  const userInfo = getUserInfo();
+  if (!userInfo) return false;
+  
+  // Check multiple possible admin indicators
+  return (
+    userInfo.role === 'admin' ||
+    userInfo.is_admin === true ||
+    userInfo.email === 'anirudh200503@gmail.com' // Admin email
+  );
+};
+
+// Protected Route for regular users
+const ProtectedRoute = ({ children }) => {
   const token = localStorage.getItem('token');
-  const user = localStorage.getItem('user');
+  const userInfo = getUserInfo();
   
   if (!token) {
-    return <Navigate to="/admin/login" replace />;
+    return <Navigate to="/login" replace />;
+  }
+
+  // If user is admin, redirect to admin panel
+  if (isAdmin()) {
+    return <Navigate to="/admin" replace />;
   }
   
-  try {
-    const userData = JSON.parse(user);
-    if (userData.role === 'admin' || userData.is_admin) {
-      return children;
-    } else {
-      return <Navigate to="/login" replace />;
-    }
-  } catch (error) {
-    return <Navigate to="/admin/login" replace />;
+  return children;
+};
+
+// Protected Route for admin users
+const AdminProtectedRoute = ({ children }) => {
+  const token = localStorage.getItem('token');
+  
+  if (!token) {
+    return <Navigate to="/login" replace />;
   }
+  
+  if (!isAdmin()) {
+    return <Navigate to="/dashboard" replace />;
+  }
+  
+  return children;
+};
+
+// Smart redirect component for root path
+const SmartRedirect = () => {
+  const token = localStorage.getItem('token');
+  
+  if (!token) {
+    return <Navigate to="/login" replace />;
+  }
+  
+  if (isAdmin()) {
+    return <Navigate to="/admin" replace />;
+  }
+  
+  return <Navigate to="/dashboard" replace />;
 };
 
 function App() {
@@ -67,18 +109,18 @@ function App() {
     <Router>
       <Routes>
         {/* Public Routes */}
-        <Route path="/" element={<Navigate to="/login" replace />} />
+        <Route path="/" element={<SmartRedirect />} />
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />
-        
-        {/* Protected Routes */}
+
+        {/* Protected Citizen Routes */}
         <Route path="/dashboard" element={
           <ProtectedRoute>
             <Dashboard />
           </ProtectedRoute>
         } />
-        <Route path="/collector" element={
+        <Route path="/collector-dashboard" element={
           <ProtectedRoute>
             <CollectorDashboard />
           </ProtectedRoute>
@@ -103,11 +145,6 @@ function App() {
             <Help />
           </ProtectedRoute>
         } />
-        <Route path="/admin" element={
-          <AdminProtectedRoute>
-            <AdminDashboard />
-          </AdminProtectedRoute>
-        } />
         <Route path="/complaint/:id" element={
           <ProtectedRoute>
             <ComplaintDetails />
@@ -118,50 +155,36 @@ function App() {
             <ProfileSettings />
           </ProtectedRoute>
         } />
-        <Route path="/account-settings" element={
-          <ProtectedRoute>
-            <AccountSettings />
-          </ProtectedRoute>
-        } />
-        
+
         {/* Admin Routes */}
-        <Route path="/admin/login" element={<AdminLogin />} />
-        <Route path="/admin/dashboard" element={
+        <Route path="/admin" element={
           <AdminProtectedRoute>
             <AdminDashboard />
           </AdminProtectedRoute>
         } />
         <Route path="/admin/complaints" element={
           <AdminProtectedRoute>
-            <AdminComplaints />
+            <AllComplaints />
           </AdminProtectedRoute>
         } />
-        <Route path="/admin/complaints/:id" element={
+        <Route path="/admin/users" element={
           <AdminProtectedRoute>
-            <AdminComplaintDetail />
+            <UserManagement />
           </AdminProtectedRoute>
         } />
-        
-        {/* Catch all route - redirect based on user role */}
-        <Route path="*" element={
-          (() => {
-            const token = localStorage.getItem('token');
-            if (!token) {
-              return <Navigate to="/login" replace />;
-            }
-            
-            try {
-              const user = JSON.parse(localStorage.getItem('user') || '{}');
-              if (user.role === 'admin' || user.is_admin) {
-                return <Navigate to="/admin/dashboard" replace />;
-              } else {
-                return <Navigate to="/dashboard" replace />;
-              }
-            } catch (error) {
-              return <Navigate to="/login" replace />;
-            }
-          })()
+        <Route path="/admin/reports" element={
+          <AdminProtectedRoute>
+            <Reports />
+          </AdminProtectedRoute>
         } />
+        <Route path="/admin/settings" element={
+          <AdminProtectedRoute>
+            <Settings />
+          </AdminProtectedRoute>
+        } />
+
+        {/* Catch all route */}
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Router>
   );

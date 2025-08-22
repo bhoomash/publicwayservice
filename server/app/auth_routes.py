@@ -238,6 +238,8 @@ async def get_current_user_info(current_user: dict = Depends(get_current_verifie
         email=current_user["email"],
         phone=current_user["phone"],
         is_verified=current_user["is_verified"],
+        role=current_user.get("role", "citizen"),
+        is_admin=current_user.get("is_admin", False),
         created_at=current_user["created_at"]
     )
 
