@@ -8,6 +8,7 @@ from .auth_utils import get_current_user
 from .db import get_database
 from .ai_service import AIService
 from .notification_routes import create_notification
+from .rag_modules.pipeline import RAGPipeline
 import uuid
 
 router = APIRouter(prefix="/complaints", tags=["complaints"])
@@ -49,9 +50,19 @@ class ComplaintResponse(BaseModel):
     submitted_date: datetime
     last_updated: datetime
     attachments: List[str] = []
+    vector_db_id: Optional[str] = None
+    rag_summary: Optional[str] = None
+    rag_department: Optional[str] = None
+    rag_urgency: Optional[str] = None
+    rag_location: Optional[str] = None
+    rag_color: Optional[str] = None
+    rag_emoji: Optional[str] = None
+    rag_text_length: Optional[int] = None
+    rag_metadata: Optional[dict] = None
 
 # Initialize AI service
 ai_service = AIService()
+rag_pipeline = RAGPipeline()
 
 @router.post("/new", response_model=dict)
 async def submit_complaint(
@@ -65,6 +76,45 @@ async def submit_complaint(
         
         # Generate complaint ID
         complaint_id = f"CMP{uuid.uuid4().hex[:6].upper()}"
+        submitted_time = datetime.utcnow()
+        status_value = "pending"
+        priority_map = {
+            "urgent": "high",
+            "high": "high",
+            "medium": "medium",
+            "low": "low"
+        }
+        urgency_lower = complaint.urgency.lower() if complaint.urgency else "medium"
+        priority_value = priority_map.get(urgency_lower, "medium")
+
+        # First, process complaint through RAG pipeline
+        try:
+            rag_result = rag_pipeline.process_text_complaint(
+                title=complaint.title,
+                description=complaint.description,
+                metadata={
+                    "complaint_id": complaint_id,
+                    "user_id": current_user["user_id"],
+                    "user_email": current_user["email"],
+                    "category_input": complaint.category,
+                    "urgency_input": complaint.urgency,
+                    "location_input": complaint.location
+                }
+            )
+        except Exception as rag_error:
+            raise HTTPException(status_code=500, detail=f"RAG processing failed: {str(rag_error)}")
+
+        if not rag_result.get("is_relevant", True):
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "message": "Your submission doesn't appear to describe a civic complaint that the government portal can address.",
+                    "reason": rag_result.get("relevance_reason", "No justification provided"),
+                    "confidence": rag_result.get("relevance_confidence", 0.0),
+                    "category": rag_result.get("relevance_category", "unknown"),
+                    "summary": rag_result.get("summary", "")
+                }
+            )
         
         # AI Processing
         ai_analysis = await ai_service.analyze_complaint(
@@ -82,26 +132,38 @@ async def submit_complaint(
             "user_email": current_user["email"],
             "title": complaint.title,
             "description": complaint.description,
-            "category": ai_analysis["category"],
+            "category": rag_result.get("department") or ai_analysis["category"],
             "location": complaint.location,
             "contact_phone": complaint.contact_phone,
             "contact_email": complaint.contact_email,
             "urgency": complaint.urgency,
-            "status": "Pending",
+            "status": status_value,
+            "priority": priority_value,
             "priority_score": ai_analysis["priority_score"],
             "assigned_department": ai_analysis["assigned_department"],
             "ai_response": ai_analysis["suggested_response"],
             "ai_category": ai_analysis["category"],
             "ai_department": ai_analysis["assigned_department"],
             "estimated_resolution": ai_analysis["estimated_resolution"],
-            "submitted_date": datetime.utcnow(),
-            "last_updated": datetime.utcnow(),
+            "submitted_date": submitted_time,
+            "last_updated": submitted_time,
+            "created_at": submitted_time,
+            "updated_at": submitted_time,
             "attachments": [],
+            "vector_db_id": rag_result["document_id"],
+            "rag_summary": rag_result["summary"],
+            "rag_department": rag_result["department"],
+            "rag_urgency": rag_result["urgency"],
+            "rag_location": rag_result["location"],
+            "rag_color": rag_result["color"],
+            "rag_emoji": rag_result["emoji"],
+            "rag_text_length": rag_result["text_length"],
+            "rag_metadata": rag_result.get("metadata", {}),
             "status_history": [
                 {
-                    "status": "Pending",
-                    "timestamp": datetime.utcnow(),
-                    "note": "Complaint submitted and processed by AI"
+                    "status": status_value,
+                    "timestamp": submitted_time,
+                    "note": "Complaint submitted, processed by RAG and AI analysis"
                 }
             ]
         }
@@ -114,13 +176,25 @@ async def submit_complaint(
             await create_notification(
                 user_id=current_user["user_id"],
                 title="Complaint Submitted",
-                message=f"Your complaint {complaint_id} has been submitted and processed by AI.",
+                message=f"Your complaint {complaint_id} has been submitted and processed by the RAG intelligence pipeline.",
                 type="submitted"
             )
-            
+            rag_payload = {
+                "document_id": rag_result["document_id"],
+                "summary": rag_result["summary"],
+                "urgency": rag_result["urgency"],
+                "department": rag_result["department"],
+                "location": rag_result["location"],
+                "color": rag_result["color"],
+                "emoji": rag_result["emoji"],
+                "text_length": rag_result["text_length"]
+            }
+
             return {
                 "success": True,
                 "complaint_id": complaint_id,
+                "vector_db_id": rag_result["document_id"],
+                "rag_analysis": rag_payload,
                 "ai_summary": {
                     "category": ai_analysis["category"],
                     "priority_score": ai_analysis["priority_score"],

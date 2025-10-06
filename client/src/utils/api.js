@@ -413,4 +413,107 @@ export const adminAPI = {
   },
 };
 
+// RAG API functions
+export const ragAPI = {
+  // Upload complaint document (PDF, DOCX, Image)
+  uploadDocument: async (file, onUploadProgress) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    const response = await api.post('/api/rag/upload', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+      onUploadProgress,
+    });
+    return response.data;
+  },
+
+  // Search for similar complaints
+  searchSimilarComplaints: async (query, filters = {}) => {
+    const response = await api.post('/api/rag/search', {
+      query,
+      n_results: filters.n_results || 5,
+      department_filter: filters.department || null,
+      urgency_filter: filters.urgency || null,
+    });
+    return response.data;
+  },
+
+  // Get complaint details from vector DB
+  getComplaintDetails: async (documentId) => {
+    const response = await api.get(`/api/rag/complaint/${documentId}`);
+    return response.data;
+  },
+
+  // Get RAG statistics
+  getRAGStats: async () => {
+    const response = await api.get('/api/rag/stats');
+    return response.data;
+  },
+
+  // Analyze text and find similar complaints before submission
+  analyzeComplaintText: async (title, description, category = null, urgency = null, location = null) => {
+    const response = await api.post('/api/rag/analyze-text', {
+      title,
+      description,
+      category,
+      urgency,
+      location,
+    });
+    return response.data;
+  },
+
+  // Add existing complaint to vector database
+  addToVectorDB: async (complaintId) => {
+    const response = await api.post('/api/rag/add-to-vector-db', null, {
+      params: { complaint_id: complaintId },
+    });
+    return response.data;
+  },
+
+  // Health check for RAG service
+  healthCheck: async () => {
+    const response = await api.get('/api/rag/health');
+    return response.data;
+  },
+
+  // Analyze text input for similar complaints and suggestions (public endpoint - no auth required)
+  analyzeText: async (text, maxResults = 5) => {
+    const response = await api.post('/api/rag/public/analyze-text', {
+      text,
+      max_results: maxResults,
+    });
+    return response.data;
+  },
+
+  // Search for similar complaints
+  searchSimilar: async (query, maxResults = 5) => {
+    const response = await api.post('/api/rag/search', {
+      query,
+      max_results: maxResults,
+    });
+    return response.data;
+  },
+
+  // Add complaint to vector database (public endpoint - no auth required)
+  addToVectorDB: async (complaintData) => {
+    const response = await api.post('/api/rag/public/add-to-vector-db', {
+      id: complaintData.id,
+      title: complaintData.title,
+      description: complaintData.description,
+      category: complaintData.category,
+      location: complaintData.location,
+      status: complaintData.status || 'pending',
+    });
+    return response.data;
+  },
+
+  // Get RAG statistics
+  getStats: async () => {
+    const response = await api.get('/api/rag/stats');
+    return response.data;
+  },
+};
+
 export default api;

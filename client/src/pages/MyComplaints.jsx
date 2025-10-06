@@ -1,5 +1,90 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import Layout from '../components/Layout';
+import { complaintsAPI } from '../utils/api';
+
+const normalizeStatus = (status) => {
+  if (!status) return 'pending';
+  return status.toString().toLowerCase().replace(/\s+/g, '_');
+};
+
+const formatLabel = (value, fallback = 'Pending') => {
+  if (!value) return fallback;
+  return value
+    .toString()
+    .replace(/_/g, ' ')
+    .split(' ')
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+};
+
+const normalizePriority = (priority, urgency) => {
+  const raw = (priority || urgency || 'medium').toString().toLowerCase();
+  if (['urgent', 'critical', 'high'].includes(raw)) return 'high';
+  if (raw === 'medium') return 'medium';
+  if (raw === 'low') return 'low';
+  return 'medium';
+};
+
+const buildUpdates = (history) => {
+  if (!Array.isArray(history)) return [];
+  return history
+    .map((entry) => {
+      const date = entry?.timestamp || entry?.date || entry?.created_at || entry?.updated_at || entry?.time;
+      return {
+        date,
+        message: entry?.note || entry?.message || `${formatLabel(entry?.status)} update`,
+        status: normalizeStatus(entry?.status)
+      };
+    })
+    .sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
+};
+
+const transformComplaint = (complaint) => {
+  const status = normalizeStatus(complaint?.status);
+  const priority = normalizePriority(complaint?.priority, complaint?.urgency);
+  const submittedDate = complaint?.submitted_date || complaint?.created_at || null;
+  const lastUpdated = complaint?.last_updated || complaint?.updated_at || submittedDate;
+
+  return {
+    id: complaint?.id,
+    title: complaint?.title || 'Complaint',
+    description: complaint?.description || complaint?.rag_summary || 'No description provided.',
+    category: complaint?.category || complaint?.ai_category || 'General',
+    status,
+    statusLabel: formatLabel(status),
+    priority,
+    priorityLabel: formatLabel(priority, 'Medium'),
+    urgency: complaint?.urgency || priority,
+    priorityScore: complaint?.priority_score || 0,
+    location: complaint?.location || complaint?.rag_location || 'Not specified',
+    assignedTo: complaint?.assigned_department || complaint?.rag_department || 'Pending assignment',
+    submittedDate,
+    lastUpdated,
+    estimatedResolution: complaint?.estimated_resolution || null,
+    vectorDbId: complaint?.vector_db_id,
+    ragSummary: complaint?.rag_summary,
+    ragMetadata: complaint?.rag_metadata,
+    aiResponse: complaint?.ai_response,
+    updates: buildUpdates(complaint?.status_history),
+    attachments: Array.isArray(complaint?.attachments) ? complaint.attachments : [],
+  };
+};
+
+const formatDate = (date) => {
+  if (!date) return 'N/A';
+  const parsed = new Date(date);
+  if (Number.isNaN(parsed.getTime())) return 'N/A';
+  return parsed.toLocaleDateString();
+};
+
+const formatResolution = (value) => {
+  if (!value) return 'TBD';
+  const parsed = new Date(value);
+  if (!Number.isNaN(parsed.getTime())) {
+    return parsed.toLocaleDateString();
+  }
+  return value;
+};
 import { 
   Search, 
   Filter, 
@@ -9,7 +94,11 @@ import {
   AlertCircle,
   FileText,
   Calendar,
-  MapPin
+  MapPin,
+  Brain,
+  Sparkles,
+  Database,
+  TrendingUp
 } from 'lucide-react';
 
 const MyComplaints = () => {
@@ -19,90 +108,74 @@ const MyComplaints = () => {
   const [statusFilter, setStatusFilter] = useState('all');
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [selectedComplaint, setSelectedComplaint] = useState(null);
-
-  useEffect(() => {
-    // TODO: Fetch actual complaints from API
-    const mockComplaints = [
-      {
-        id: 'CMP001',
-        title: 'Street Light Not Working',
-        description: 'The street light in front of house number 123 has been non-functional for the past week.',
-        category: 'Infrastructure',
-        status: 'In Progress',
-        priority: 'medium',
-        location: '123 Main Street, Downtown',
-        submittedDate: '2025-08-15',
-        lastUpdated: '2025-08-16',
-        estimatedResolution: '2025-08-20',
-        assignedTo: 'Municipal Corporation',
-        updates: [
-          { date: '2025-08-16', message: 'Complaint received and forwarded to electrical department' },
-          { date: '2025-08-15', message: 'Complaint submitted successfully' }
-        ]
-      },
-      {
-        id: 'CMP002',
-        title: 'Water Supply Issue',
-        description: 'No water supply in our area for the past 3 days. Multiple households affected.',
-        category: 'Utilities',
-        status: 'Pending',
-        priority: 'high',
-        location: 'Green Valley Colony, Sector 12',
-        submittedDate: '2025-08-14',
-        lastUpdated: '2025-08-14',
-        estimatedResolution: '2025-08-18',
-        assignedTo: 'Water Department',
-        updates: [
-          { date: '2025-08-14', message: 'Complaint submitted successfully' }
-        ]
-      },
-      {
-        id: 'CMP003',
-        title: 'Road Repair Required',
-        description: 'Large potholes on the main road causing traffic issues and vehicle damage.',
-        category: 'Infrastructure',
-        status: 'Resolved',
-        priority: 'medium',
-        location: 'Highway 101, Mile Marker 45',
-        submittedDate: '2025-08-13',
-        lastUpdated: '2025-08-16',
-        estimatedResolution: '2025-08-16',
-        assignedTo: 'Road Maintenance',
-        updates: [
-          { date: '2025-08-16', message: 'Road repair completed successfully' },
-          { date: '2025-08-15', message: 'Repair work started' },
-          { date: '2025-08-14', message: 'Site inspection completed' },
-          { date: '2025-08-13', message: 'Complaint submitted successfully' }
-        ]
-      }
-    ];
-    
-    setComplaints(mockComplaints);
-    setFilteredComplaints(mockComplaints);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [reloadKey, setReloadKey] = useState(0);
+  const refreshComplaints = useCallback(() => {
+    setReloadKey((key) => key + 1);
   }, []);
 
   useEffect(() => {
-    let filtered = complaints;
+    let isMounted = true;
+
+    const fetchComplaints = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const response = await complaintsAPI.getMyComplaints();
+        const items = Array.isArray(response) ? response.map(transformComplaint) : [];
+        if (!isMounted) return;
+        setComplaints(items);
+        setFilteredComplaints(items);
+      } catch (err) {
+        if (!isMounted) return;
+        const detail = err?.response?.data?.detail;
+        const message = typeof detail === 'string' ? detail : detail?.message || err.message || 'Failed to load complaints.';
+        setError(message);
+        setComplaints([]);
+        setFilteredComplaints([]);
+      } finally {
+        if (isMounted) {
+          setLoading(false);
+        }
+      }
+    };
+
+    fetchComplaints();
+
+    const handleComplaintSubmitted = () => {
+      refreshComplaints();
+    };
+
+    window.addEventListener('complaint:submitted', handleComplaintSubmitted);
+
+    return () => {
+      isMounted = false;
+      window.removeEventListener('complaint:submitted', handleComplaintSubmitted);
+    };
+  }, [reloadKey, refreshComplaints]);
+
+  useEffect(() => {
+  let filtered = [...complaints];
 
     // Filter by search term
     if (searchTerm) {
-      filtered = filtered.filter(complaint => 
-        complaint.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        complaint.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        complaint.description.toLowerCase().includes(searchTerm.toLowerCase())
+      const searchLower = searchTerm.toLowerCase();
+      filtered = filtered.filter((complaint) =>
+        complaint.title.toLowerCase().includes(searchLower) ||
+        (complaint.id || '').toLowerCase().includes(searchLower) ||
+        (complaint.description || '').toLowerCase().includes(searchLower)
       );
     }
 
     // Filter by status
     if (statusFilter !== 'all') {
-      filtered = filtered.filter(complaint => 
-        complaint.status.toLowerCase().replace(' ', '_') === statusFilter
-      );
+      filtered = filtered.filter((complaint) => complaint.status === statusFilter);
     }
 
     // Filter by category
     if (categoryFilter !== 'all') {
-      filtered = filtered.filter(complaint => complaint.category === categoryFilter);
+      filtered = filtered.filter((complaint) => complaint.category === categoryFilter);
     }
 
     setFilteredComplaints(filtered);
@@ -110,33 +183,83 @@ const MyComplaints = () => {
 
   const getStatusIcon = (status) => {
     switch (status) {
-      case 'Resolved': return <CheckCircle size={16} className="text-green-600" />;
-      case 'In Progress': return <Clock size={16} className="text-orange-600" />;
-      case 'Pending': return <AlertCircle size={16} className="text-red-600" />;
-      default: return <FileText size={16} className="text-gray-600" />;
+      case 'resolved':
+        return <CheckCircle size={16} className="text-green-600" />;
+      case 'in_progress':
+        return <Clock size={16} className="text-orange-600" />;
+      case 'pending':
+        return <AlertCircle size={16} className="text-yellow-600" />;
+      case 'rejected':
+        return <AlertCircle size={16} className="text-red-600" />;
+      default:
+        return <FileText size={16} className="text-gray-600" />;
     }
   };
 
   const getStatusColor = (status) => {
     switch (status) {
-      case 'Resolved': return 'text-green-600 bg-green-100';
-      case 'In Progress': return 'text-orange-600 bg-orange-100';
-      case 'Pending': return 'text-red-600 bg-red-100';
-      default: return 'text-gray-600 bg-gray-100';
+      case 'resolved':
+        return 'text-green-600 bg-green-100';
+      case 'in_progress':
+        return 'text-orange-600 bg-orange-100';
+      case 'pending':
+        return 'text-yellow-700 bg-yellow-100';
+      case 'rejected':
+        return 'text-red-600 bg-red-100';
+      default:
+        return 'text-gray-600 bg-gray-100';
     }
   };
 
   const getPriorityColor = (priority) => {
     switch (priority) {
-      case 'urgent': return 'text-red-600 bg-red-100';
-      case 'high': return 'text-orange-600 bg-orange-100';
-      case 'medium': return 'text-blue-600 bg-blue-100';
-      case 'low': return 'text-gray-600 bg-gray-100';
-      default: return 'text-gray-600 bg-gray-100';
+      case 'high':
+        return 'text-red-600 bg-red-100';
+      case 'medium':
+        return 'text-blue-600 bg-blue-100';
+      case 'low':
+        return 'text-gray-600 bg-gray-100';
+      default:
+        return 'text-gray-600 bg-gray-100';
     }
   };
 
   const categories = ['Infrastructure', 'Utilities', 'Road & Transportation', 'Public Safety', 'Healthcare', 'Education', 'Environmental', 'Corruption', 'Administrative', 'Other'];
+
+  if (loading && !selectedComplaint) {
+    return (
+      <Layout title="My Complaints">
+        <div className="flex items-center justify-center min-h-[400px]">
+          <div className="flex flex-col items-center space-y-4">
+            <div className="animate-spin rounded-full h-16 w-16 border-4 border-purple-200 border-t-purple-600"></div>
+            <p className="text-sm text-gray-600">Loading your complaints...</p>
+          </div>
+        </div>
+      </Layout>
+    );
+  }
+
+  if (error && !selectedComplaint) {
+    return (
+      <Layout title="My Complaints">
+        <div className="max-w-xl mx-auto mt-10 bg-white border border-red-200 rounded-lg p-6">
+          <div className="flex items-start">
+            <AlertCircle size={24} className="text-red-600 mr-3 mt-0.5" />
+            <div>
+              <h2 className="text-lg font-semibold text-red-700 mb-1">Unable to load complaints</h2>
+              <p className="text-sm text-gray-600 mb-4">{error}</p>
+              <button
+                onClick={refreshComplaints}
+                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+              >
+                Retry
+              </button>
+            </div>
+          </div>
+        </div>
+      </Layout>
+    );
+  }
 
   if (selectedComplaint) {
     return (
@@ -159,11 +282,12 @@ const MyComplaints = () => {
                   <h1 className="text-2xl font-bold text-gray-800 mb-2">{selectedComplaint.title}</h1>
                   <div className="flex items-center space-x-4 text-sm text-gray-600">
                     <span>ID: {selectedComplaint.id}</span>
-                    <span className={`px-2 py-1 rounded-full font-medium ${getStatusColor(selectedComplaint.status)}`}>
-                      {selectedComplaint.status}
+                    <span className={`px-2 py-1 rounded-full font-medium inline-flex items-center space-x-1 ${getStatusColor(selectedComplaint.status)}`}>
+                      <span className="flex items-center">{getStatusIcon(selectedComplaint.status)}</span>
+                      <span>{selectedComplaint.statusLabel}</span>
                     </span>
                     <span className={`px-2 py-1 rounded-full font-medium ${getPriorityColor(selectedComplaint.priority)}`}>
-                      {selectedComplaint.priority.charAt(0).toUpperCase() + selectedComplaint.priority.slice(1)} Priority
+                      {selectedComplaint.priorityLabel} Priority
                     </span>
                   </div>
                 </div>
@@ -201,21 +325,21 @@ const MyComplaints = () => {
                       <span className="text-sm text-gray-600">Submitted:</span>
                       <p className="font-medium flex items-center">
                         <Calendar size={16} className="mr-1 text-gray-500" />
-                        {new Date(selectedComplaint.submittedDate).toLocaleDateString()}
+                        {formatDate(selectedComplaint.submittedDate)}
                       </p>
                     </div>
                     <div>
                       <span className="text-sm text-gray-600">Last Updated:</span>
                       <p className="font-medium flex items-center">
                         <Calendar size={16} className="mr-1 text-gray-500" />
-                        {new Date(selectedComplaint.lastUpdated).toLocaleDateString()}
+                        {formatDate(selectedComplaint.lastUpdated)}
                       </p>
                     </div>
                     <div>
                       <span className="text-sm text-gray-600">Expected Resolution:</span>
                       <p className="font-medium flex items-center">
                         <Calendar size={16} className="mr-1 text-gray-500" />
-                        {new Date(selectedComplaint.estimatedResolution).toLocaleDateString()}
+                        {formatResolution(selectedComplaint.estimatedResolution)}
                       </p>
                     </div>
                   </div>
@@ -229,17 +353,21 @@ const MyComplaints = () => {
 
               <div>
                 <h3 className="font-semibold text-gray-800 mb-3">Status Updates</h3>
-                <div className="space-y-3">
-                  {selectedComplaint.updates.map((update, index) => (
-                    <div key={index} className="flex items-start space-x-3 p-3 bg-gray-50 rounded-lg">
-                      <div className="w-2 h-2 bg-blue-600 rounded-full mt-2"></div>
-                      <div>
-                        <p className="font-medium text-gray-800">{update.message}</p>
-                        <p className="text-sm text-gray-600">{new Date(update.date).toLocaleDateString()}</p>
+                {selectedComplaint.updates.length > 0 ? (
+                  <div className="space-y-3">
+                    {selectedComplaint.updates.map((update, index) => (
+                      <div key={index} className="flex items-start space-x-3 p-3 bg-gray-50 rounded-lg">
+                        <div className="w-2 h-2 bg-blue-600 rounded-full mt-2"></div>
+                        <div>
+                          <p className="font-medium text-gray-800">{update.message}</p>
+                          <p className="text-sm text-gray-600">{formatDate(update.date)}</p>
+                        </div>
                       </div>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-gray-500">No updates yet. We&apos;ll notify you as soon as your complaint progresses.</p>
+                )}
               </div>
             </div>
           </div>
@@ -298,10 +426,18 @@ const MyComplaints = () => {
 
         {/* Complaints List */}
         <div className="bg-white rounded-lg shadow-sm border border-gray-200">
-          <div className="p-6 border-b border-gray-200">
+          <div className="p-6 border-b border-gray-200 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
             <h2 className="text-lg font-semibold text-gray-800">
               Your Complaints ({filteredComplaints.length})
             </h2>
+            <div className="flex items-center space-x-3">
+              <button
+                onClick={refreshComplaints}
+                className="inline-flex items-center px-3 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                <Sparkles size={16} className="mr-1" /> Refresh List
+              </button>
+            </div>
           </div>
 
           {filteredComplaints.length === 0 ? (
@@ -318,25 +454,47 @@ const MyComplaints = () => {
           ) : (
             <div className="space-y-4 p-6">
               {filteredComplaints.map((complaint) => (
-                <div key={complaint.id} className="bg-white border border-gray-200 rounded-lg p-6 hover:shadow-md transition-all duration-200">
+                <div key={complaint.id} className="bg-white border-2 border-gray-200 rounded-lg p-6 hover:shadow-lg hover:border-purple-200 transition-all duration-200">
                   <div className="flex flex-col lg:flex-row lg:items-center justify-between space-y-4 lg:space-y-0">
                     <div className="flex-1">
                       <div className="flex flex-col sm:flex-row sm:items-start justify-between mb-3">
-                        <h3 className="text-lg font-semibold text-gray-800 mb-2 sm:mb-0">{complaint.title}</h3>
+                        <div className="flex items-center">
+                          <h3 className="text-lg font-semibold text-gray-800 mb-2 sm:mb-0">{complaint.title}</h3>
+                          {/* AI Processed Badge */}
+                          <span className="ml-3 px-2 py-1 bg-gradient-to-r from-purple-100 to-blue-100 text-purple-700 rounded-full text-xs font-medium flex items-center">
+                            <Brain size={12} className="mr-1" />
+                            AI Processed
+                          </span>
+                        </div>
                         <div className="flex items-center space-x-2">
                           <span className={`px-3 py-1 rounded-full text-xs font-medium flex items-center ${getStatusColor(complaint.status)}`}>
                             {getStatusIcon(complaint.status)}
-                            <span className="ml-1">{complaint.status}</span>
+                            <span className="ml-1">{complaint.statusLabel}</span>
                           </span>
                           <span className={`px-2 py-1 rounded-full text-xs font-medium ${getPriorityColor(complaint.priority)}`}>
-                            {complaint.priority}
+                            {complaint.priorityLabel}
                           </span>
                         </div>
                       </div>
                       
                       <p className="text-gray-600 mb-4 line-clamp-2">{complaint.description}</p>
                       
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm text-gray-500 mb-4">
+                      {/* AI Insights Bar */}
+                      <div className="bg-gradient-to-r from-purple-50 to-blue-50 border border-purple-200 rounded-lg p-3 mb-4">
+                        <div className="flex items-center text-sm">
+                          <Sparkles size={14} className="text-purple-600 mr-2" />
+                          <span className="text-gray-700 font-medium mr-2">AI Analysis:</span>
+                          <span className="text-gray-600">Auto-assigned to {complaint.assignedTo}</span>
+                          {complaint.vectorDbId && (
+                            <span className="ml-auto text-xs text-gray-500 flex items-center">
+                              <Database size={12} className="mr-1" />
+                              Vector DB
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-sm text-gray-500 mb-4">
                         <div className="flex items-center">
                           <span className="font-medium">ID:</span>
                           <span className="ml-1">{complaint.id}</span>
@@ -347,7 +505,15 @@ const MyComplaints = () => {
                         </div>
                         <div className="flex items-center">
                           <span className="font-medium">Submitted:</span>
-                          <span className="ml-1">{new Date(complaint.submittedDate).toLocaleDateString()}</span>
+                          <span className="ml-1">{formatDate(complaint.submittedDate)}</span>
+                        </div>
+                        <div className="flex items-center">
+                          <span className="font-medium">Updated:</span>
+                          <span className="ml-1">{formatDate(complaint.lastUpdated)}</span>
+                        </div>
+                        <div className="flex items-center">
+                          <span className="font-medium">Priority Score:</span>
+                          <span className="ml-1">{complaint.priorityScore}</span>
                         </div>
                       </div>
                       

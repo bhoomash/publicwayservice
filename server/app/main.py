@@ -5,6 +5,7 @@ from .complaint_routes import router as complaint_router
 from .notification_routes import router as notification_router
 from .chat_routes import router as chat_router
 from .admin_routes import router as admin_router
+from .rag_routes import router as rag_router
 
 app = FastAPI(
     title="GrievanceBot API", 
@@ -27,6 +28,7 @@ app.include_router(complaint_router)
 app.include_router(notification_router)
 app.include_router(chat_router)
 app.include_router(admin_router)
+app.include_router(rag_router)  # RAG routes for document upload and semantic search
 
 @app.get("/")
 async def root():

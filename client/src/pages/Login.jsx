@@ -48,6 +48,10 @@ const Login = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    e.stopPropagation(); // Prevent event bubbling
+    
+    console.log('Login form submitted', formData);
+    
     const newErrors = validateForm();
     
     if (Object.keys(newErrors).length === 0) {
@@ -55,19 +59,24 @@ const Login = () => {
       setApiError('');
       
       try {
+        console.log('Calling login API...');
         const response = await authAPI.login(formData.email, formData.password);
+        console.log('Login response:', response);
         
         // Store token and redirect
         tokenUtils.setToken(response.access_token);
         
         // Get user info and store it
+        console.log('Getting user info...');
         const userInfo = await authAPI.getCurrentUser();
+        console.log('User info:', userInfo);
         tokenUtils.setUser(userInfo);
         
         // Store user role for easier access
         localStorage.setItem('userRole', userInfo.role || 'citizen');
         
         // Redirect based on user role
+        console.log('Redirecting user...');
         if (userInfo.role === 'admin' || userInfo.is_admin) {
           navigate('/admin');
         } else {
@@ -75,15 +84,19 @@ const Login = () => {
         }
       } catch (error) {
         console.error('Login error:', error);
+        console.error('Error response:', error.response);
         if (error.response?.data?.detail) {
           setApiError(error.response.data.detail);
+        } else if (error.message) {
+          setApiError(error.message);
         } else {
-          setApiError('Login failed. Please try again.');
+          setApiError('Login failed. Please check your connection and try again.');
         }
       } finally {
         setIsLoading(false);
       }
     } else {
+      console.log('Validation errors:', newErrors);
       setErrors(newErrors);
     }
   };

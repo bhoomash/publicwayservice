@@ -16,7 +16,13 @@ import {
   Download,
   Edit,
   Trash2,
-  MessageSquare
+  MessageSquare,
+  Brain,
+  Sparkles,
+  Database,
+  TrendingUp,
+  Lightbulb,
+  Zap
 } from 'lucide-react';
 
 const ComplaintDetails = () => {
@@ -44,6 +50,8 @@ const ComplaintDetails = () => {
       priority_score: 85,
       assignedDepartment: 'Municipal Corporation - Electrical Division',
       aiResponse: 'Based on the description, this appears to be an electrical infrastructure issue requiring immediate attention. The complaint indicates a non-functional street light affecting public safety. Recommended action: Dispatch electrical maintenance team for inspection and repair. Priority level: High due to safety concerns. Estimated resolution time: 24-48 hours.',
+      aiProcessed: true,
+      vectorDbId: 'vec_5f8a2b3c4d1e',
       submittedDate: '2025-08-15T10:30:00Z',
       lastUpdated: '2025-08-16T14:20:00Z',
       location: '123 Main Street, Downtown',
@@ -52,11 +60,22 @@ const ComplaintDetails = () => {
         { name: 'location_map.pdf', size: '1.1 MB', type: 'pdf' }
       ],
       statusHistory: [
-        { date: '2025-08-16T14:20:00Z', status: 'Assigned', note: 'Assigned to Municipal Corporation - Electrical Division', updatedBy: 'System' },
-        { date: '2025-08-15T10:30:00Z', status: 'Submitted', note: 'Complaint submitted by user', updatedBy: 'John Doe' }
+        { date: '2025-08-16T14:20:00Z', status: 'Assigned', note: 'Assigned to Municipal Corporation - Electrical Division', updatedBy: 'AI System' },
+        { date: '2025-08-15T10:30:00Z', status: 'Submitted', note: 'Complaint submitted and processed by AI', updatedBy: 'John Doe' }
       ],
       notes: [
         { date: '2025-08-16T15:00:00Z', note: 'Electrical team has been notified. Will inspect tomorrow morning.', addedBy: 'Admin' }
+      ],
+      similarComplaints: [
+        { id: 'CMP045', title: 'Broken Street Light on Oak Street', similarity: 0.92, status: 'Resolved' },
+        { id: 'CMP078', title: 'Non-functioning street lights in downtown area', similarity: 0.87, status: 'In Progress' },
+        { id: 'CMP012', title: 'Dark street - light not working', similarity: 0.85, status: 'Resolved' }
+      ],
+      aiRecommendations: [
+        'Prioritize this complaint due to public safety concerns',
+        'Consider preventive maintenance for nearby street lights',
+        'Schedule inspection during evening hours to verify the issue',
+        'Coordinate with electrical department for faster resolution'
       ]
     };
     
@@ -259,7 +278,109 @@ const ComplaintDetails = () => {
               )}
             </div>
 
-            {/* AI Response */}
+            {/* AI Processing Status */}
+            {complaint.aiProcessed && (
+              <div className="bg-gradient-to-br from-purple-50 to-blue-50 rounded-lg shadow-sm border-2 border-purple-200 p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-semibold text-gray-800 flex items-center">
+                    <Brain size={24} className="mr-2 text-purple-600" />
+                    AI Processing Details
+                  </h3>
+                  <span className="px-3 py-1 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-full text-xs font-semibold flex items-center">
+                    <Sparkles size={12} className="mr-1" />
+                    AI POWERED
+                  </span>
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                  <div className="bg-white rounded-lg p-4 border border-purple-200">
+                    <div className="text-xs text-gray-600 mb-1">Priority Score</div>
+                    <div className="text-2xl font-bold text-purple-600">{complaint.priority_score}</div>
+                    <div className="text-xs text-gray-500">AI calculated</div>
+                  </div>
+                  <div className="bg-white rounded-lg p-4 border border-blue-200">
+                    <div className="text-xs text-gray-600 mb-1">Vector DB ID</div>
+                    <div className="text-sm font-mono text-blue-600">{complaint.vectorDbId}</div>
+                    <div className="text-xs text-gray-500 flex items-center">
+                      <Database size={10} className="mr-1" />
+                      Stored in RAG
+                    </div>
+                  </div>
+                  <div className="bg-white rounded-lg p-4 border border-green-200">
+                    <div className="text-xs text-gray-600 mb-1">Similar Cases</div>
+                    <div className="text-2xl font-bold text-green-600">{complaint.similarComplaints?.length || 0}</div>
+                    <div className="text-xs text-gray-500">Found by AI</div>
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-lg p-4 border border-purple-200">
+                  <div className="flex items-start mb-2">
+                    <Sparkles size={16} className="text-purple-600 mr-2 mt-0.5 flex-shrink-0" />
+                    <div className="flex-1">
+                      <h4 className="font-semibold text-gray-800 mb-2">AI Analysis</h4>
+                      <p className="text-gray-700 text-sm leading-relaxed">{complaint.aiResponse}</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Similar Complaints */}
+            {complaint.similarComplaints && complaint.similarComplaints.length > 0 && (
+              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
+                  <TrendingUp size={20} className="mr-2 text-blue-600" />
+                  Similar Complaints ({complaint.similarComplaints.length})
+                </h3>
+                <p className="text-sm text-gray-600 mb-4">
+                  AI found these similar complaints based on semantic analysis:
+                </p>
+                <div className="space-y-3">
+                  {complaint.similarComplaints.map((similar, index) => (
+                    <div key={index} className="bg-blue-50 border border-blue-200 rounded-lg p-4 hover:shadow-md transition-shadow">
+                      <div className="flex items-center justify-between mb-2">
+                        <h4 className="font-medium text-gray-800 flex-1">{similar.title}</h4>
+                        <div className="flex items-center space-x-2">
+                          <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-medium">
+                            {Math.round(similar.similarity * 100)}% match
+                          </span>
+                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                            similar.status === 'Resolved' ? 'bg-green-100 text-green-700' :
+                            similar.status === 'In Progress' ? 'bg-yellow-100 text-yellow-700' :
+                            'bg-gray-100 text-gray-700'
+                          }`}>
+                            {similar.status}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="text-xs text-gray-600">Complaint ID: {similar.id}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* AI Recommendations */}
+            {complaint.aiRecommendations && complaint.aiRecommendations.length > 0 && (
+              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
+                  <Lightbulb size={20} className="mr-2 text-yellow-600" />
+                  AI Recommendations
+                </h3>
+                <ul className="space-y-3">
+                  {complaint.aiRecommendations.map((recommendation, index) => (
+                    <li key={index} className="flex items-start">
+                      <span className="flex-shrink-0 w-6 h-6 bg-yellow-100 text-yellow-700 rounded-full flex items-center justify-center text-xs font-semibold mr-3 mt-0.5">
+                        {index + 1}
+                      </span>
+                      <span className="text-gray-700">{recommendation}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {/* Original AI Response Section */}
             <div className="bg-white rounded-lg shadow-sm border border-gray-200">
               <div className="p-6 border-b border-gray-200">
                 <button
@@ -268,7 +389,7 @@ const ComplaintDetails = () => {
                 >
                   <h3 className="text-lg font-semibold text-gray-800 flex items-center">
                     <MessageSquare size={20} className="mr-2 text-purple-600" />
-                    AI Analysis & Recommendations
+                    Status Updates & Notes
                   </h3>
                   <span className="text-gray-400">
                     {showAIResponse ? '−' : '+'}
@@ -277,8 +398,7 @@ const ComplaintDetails = () => {
               </div>
               {showAIResponse && (
                 <div className="p-6">
-                  <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
-                    <p className="text-gray-700 leading-relaxed">{complaint.aiResponse}</p>
+                  <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
                   </div>
                   <div className="mt-4 flex items-center justify-between text-sm text-gray-600">
                     <span>Assigned to: {complaint.assignedDepartment}</span>

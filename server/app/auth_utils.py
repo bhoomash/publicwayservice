@@ -157,8 +157,17 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
                 headers={"WWW-Authenticate": "Bearer"},
             )
         
-        # Convert ObjectId to string
-        user["_id"] = str(user["_id"])
+        # Normalize identifiers and computed fields for downstream routes
+        original_id = user.get("_id")
+        user_id = str(user.get("user_id") or user.get("id") or original_id)
+        full_name = f"{user.get('first_name', '').strip()} {user.get('last_name', '').strip()}".strip()
+
+        user["mongo_id"] = original_id
+        user["_id"] = user_id
+        user["user_id"] = user_id
+        user["full_name"] = full_name if full_name else user.get("email", "User")
+        user.setdefault("role", "citizen")
+        user.setdefault("is_admin", bool(user.get("role") == "admin"))
         
         return user
         

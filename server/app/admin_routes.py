@@ -40,22 +40,30 @@ async def get_dashboard_stats(period: str = "today", current_admin: dict = Depen
     else:
         start_date = now.replace(hour=0, minute=0, second=0, microsecond=0)
     
-    # Get complaints in the date range
-    date_filter = {"created_at": {"$gte": start_date}}
-    
-    # Total complaints
+    # Build date filter supporting legacy documents
+    date_filter = {
+        "$or": [
+            {"created_at": {"$gte": start_date}},
+            {"submitted_date": {"$gte": start_date}}
+        ]
+    }
+
+    # Total metrics
     total_complaints = complaints_collection.count_documents(date_filter)
-    
-    # Status counts
-    pending_complaints = complaints_collection.count_documents({**date_filter, "status": "pending"})
-    in_progress_complaints = complaints_collection.count_documents({**date_filter, "status": "in_progress"})
-    resolved_complaints = complaints_collection.count_documents({**date_filter, "status": "resolved"})
-    
-    # Priority counts
-    high_priority = complaints_collection.count_documents({**date_filter, "priority": "high"})
-    medium_priority = complaints_collection.count_documents({**date_filter, "priority": "medium"})
-    low_priority = complaints_collection.count_documents({**date_filter, "priority": "low"})
-    
+    total_users = users_collection.count_documents({"is_admin": {"$ne": True}})
+
+    status_regex = lambda value: {"$regex": f"^{value}$", "$options": "i"}
+
+    # Status counts (case-insensitive)
+    pending_complaints = complaints_collection.count_documents({**date_filter, "status": status_regex("pending")})
+    in_progress_complaints = complaints_collection.count_documents({**date_filter, "status": status_regex("in_progress")})
+    resolved_complaints = complaints_collection.count_documents({**date_filter, "status": status_regex("resolved")})
+
+    # Priority counts (case-insensitive)
+    high_priority = complaints_collection.count_documents({**date_filter, "priority": status_regex("high")})
+    medium_priority = complaints_collection.count_documents({**date_filter, "priority": status_regex("medium")})
+    low_priority = complaints_collection.count_documents({**date_filter, "priority": status_regex("low")})
+
     # Category distribution
     pipeline = [
         {"$match": date_filter},
@@ -85,7 +93,7 @@ async def get_dashboard_stats(period: str = "today", current_admin: dict = Depen
     # Recent complaints
     recent_complaints = list(complaints_collection.find(
         date_filter,
-        sort=[("created_at", -1)],
+        sort=[("created_at", -1), ("submitted_date", -1)],
         limit=10
     ))
     
@@ -96,9 +104,13 @@ async def get_dashboard_stats(period: str = "today", current_admin: dict = Depen
     
     return {
         "totalComplaints": total_complaints,
+        "totalUsers": total_users,
         "pendingComplaints": pending_complaints,
         "inProgressComplaints": in_progress_complaints,
         "resolvedComplaints": resolved_complaints,
+        "highPriorityComplaints": high_priority,
+        "mediumPriorityComplaints": medium_priority,
+        "lowPriorityComplaints": low_priority,
         "highPriority": high_priority,
         "mediumPriority": medium_priority,
         "lowPriority": low_priority,
