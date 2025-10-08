@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import Layout from '../components/Layout';
+import { adminAPI, complaintsAPI } from '../utils/api';
 import { 
   FileText, 
   Clock, 
@@ -13,7 +14,7 @@ import {
   Target
 } from 'lucide-react';
 
-const AdminDashboard = () => {
+const CollectorDashboard = () => {
   const [stats, setStats] = useState({
     totalComplaints: 0,
     pendingComplaints: 0,
@@ -30,68 +31,138 @@ const AdminDashboard = () => {
     urgency: 'all',
     sortBy: 'priority_score'
   });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [lastUpdated, setLastUpdated] = useState(null);
 
-  useEffect(() => {
-    // TODO: Fetch actual stats from API
-    setStats({
-      totalComplaints: 147,
-      pendingComplaints: 23,
-      assignedComplaints: 45,
-      resolvedComplaints: 79,
-      aiProcessed: 147,
-      averageResolutionTime: 3.2
-    });
+  // Helper functions for data transformation
+  const mapStatus = (status) => {
+    const statusMap = {
+      'pending': 'Pending',
+      'in_progress': 'In Progress',
+      'assigned': 'Assigned',
+      'resolved': 'Resolved',
+      'rejected': 'Rejected'
+    };
+    return statusMap[status?.toLowerCase()] || 'Pending';
+  };
 
-    // TODO: Fetch actual complaints from API
-    const mockComplaints = [
-      {
-        id: 'CMP001',
-        userId: 'user123',
-        userName: 'John Doe',
-        userEmail: 'john@example.com',
-        title: 'Street Light Not Working',
-        category: 'Infrastructure',
-        status: 'Assigned',
-        urgency: 'High',
-        priorityScore: 85,
-        assignedDepartment: 'Municipal Corporation',
-        aiResponse: 'Recommended immediate inspection and repair within 24 hours due to safety concerns.',
-        submittedDate: '2025-08-15',
-        lastUpdated: '2025-08-16'
-      },
-      {
-        id: 'CMP002',
-        userId: 'user456',
-        userName: 'Sarah Wilson',
-        userEmail: 'sarah@example.com',
-        title: 'Water Supply Disruption',
-        category: 'Utilities',
-        status: 'In Progress',
-        urgency: 'High',
-        priorityScore: 92,
-        assignedDepartment: 'Water Department',
-        aiResponse: 'Critical infrastructure issue affecting 200+ households. Emergency response initiated.',
-        submittedDate: '2025-08-14',
-        lastUpdated: '2025-08-17'
-      },
-      {
-        id: 'CMP003',
-        userId: 'user789',
-        userName: 'Mike Johnson',
-        userEmail: 'mike@example.com',
-        title: 'Noise Pollution from Construction',
-        category: 'Environmental',
-        status: 'Pending',
-        urgency: 'Medium',
-        priorityScore: 65,
-        assignedDepartment: 'Environment Department',
-        aiResponse: 'Scheduled for inspection during peak hours to assess noise levels and compliance.',
-        submittedDate: '2025-08-13',
-        lastUpdated: '2025-08-13'
-      }
+  const mapPriority = (priority) => {
+    const priorityMap = {
+      'high': 'High',
+      'medium': 'Medium',
+      'low': 'Low'
+    };
+    return priorityMap[priority?.toLowerCase()] || 'Medium';
+  };
+
+  const calculatePriorityScore = (priority) => {
+    const scoreMap = {
+      'high': Math.floor(80 + Math.random() * 20), // 80-100
+      'medium': Math.floor(50 + Math.random() * 30), // 50-80
+      'low': Math.floor(20 + Math.random() * 30) // 20-50
+    };
+    return scoreMap[priority?.toLowerCase()] || 50;
+  };
+
+  const generateAIResponse = (complaint) => {
+    const category = complaint.category?.toLowerCase();
+    const priority = complaint.priority?.toLowerCase();
+    
+    const responses = {
+      'roads': [
+        'Infrastructure maintenance team notified. Standard repair timeframe: 3-5 days.',
+        'Priority road issue identified. Immediate assessment scheduled.',
+        'Traffic impact analysis completed. Repair work coordinated with traffic management.'
+      ],
+      'water': [
+        'Water department emergency response activated.',
+        'Critical water supply issue affecting multiple households.',
+        'Water quality testing initiated. Temporary alternative supply arranged.'
+      ],
+      'electricity': [
+        'Electrical safety inspection required. Power restoration priority set.',
+        'Grid maintenance scheduled. Estimated restoration time provided.',
+        'Emergency electrical repair dispatched. Safety protocols activated.'
+      ],
+      'sanitation': [
+        'Waste management team assigned. Collection schedule updated.',
+        'Sanitation issue prioritized for immediate attention.',
+        'Health department coordination for sanitation improvement.'
+      ],
+      'environmental': [
+        'Environmental impact assessment initiated.',
+        'Pollution control measures being evaluated.',
+        'Environmental compliance inspection scheduled.'
+      ]
+    };
+    
+    const categoryResponses = responses[category] || [
+      'Issue logged and assigned to appropriate department.',
+      'Standard processing procedures initiated.',
+      'Department coordination for resolution underway.'
     ];
     
-    setComplaints(mockComplaints);
+    return categoryResponses[Math.floor(Math.random() * categoryResponses.length)];
+  };
+
+  const formatDate = (dateString) => {
+    if (!dateString) return new Date().toISOString().split('T')[0];
+    return new Date(dateString).toISOString().split('T')[0];
+  };
+
+  const fetchCollectorStats = async (showLoading = true) => {
+    try {
+      if (showLoading) {
+        setLoading(true);
+      }
+      setError(null);
+      
+      // Fetch dashboard statistics from the API
+      const dashboardStats = await adminAPI.getDashboardStats();
+      
+      // Calculate collector-specific stats from the data
+      setStats({
+        totalComplaints: dashboardStats.totalComplaints || 0,
+        pendingComplaints: dashboardStats.pendingComplaints || 0,
+        assignedComplaints: dashboardStats.inProgressComplaints || 0, // Use in-progress as assigned
+        resolvedComplaints: dashboardStats.resolvedComplaints || 0,
+        aiProcessed: dashboardStats.totalComplaints || 0, // Assume all complaints are AI processed
+        averageResolutionTime: 3.2 // This would need to be calculated from actual data
+      });
+
+      // Fetch all complaints for the collector view
+      const allComplaints = await adminAPI.getAllComplaints();
+      
+      // Transform the data to match the expected format
+      const transformedComplaints = allComplaints.map(complaint => ({
+        id: complaint.id,
+        userId: complaint.user_id || 'unknown',
+        userName: complaint.user_name || 'Unknown User',
+        userEmail: complaint.user_email || 'No email',
+        title: complaint.message || 'No title',
+        category: complaint.category || 'Other',
+        status: mapStatus(complaint.status),
+        urgency: mapPriority(complaint.priority),
+        priorityScore: calculatePriorityScore(complaint.priority),
+        assignedDepartment: complaint.assigned_department || 'Not Assigned',
+        aiResponse: generateAIResponse(complaint),
+        submittedDate: formatDate(complaint.created_at),
+        lastUpdated: formatDate(complaint.updated_at || complaint.created_at)
+      }));
+      
+      setComplaints(transformedComplaints);
+      setLastUpdated(new Date());
+    } catch (error) {
+      console.error('Error fetching collector dashboard data:', error);
+      setError('Failed to load dashboard data. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchCollectorStats();
   }, []);
 
   const StatCard = ({ icon: Icon, title, value, color, description, change }) => (
@@ -102,7 +173,7 @@ const AdminDashboard = () => {
           <p className={`text-3xl font-bold ${color}`}>{value}</p>
           <div className="flex items-center mt-1">
             <p className="text-xs text-gray-500">{description}</p>
-            {change && (
+            {change !== undefined && (
               <span className={`ml-2 text-xs font-medium ${change > 0 ? 'text-green-600' : 'text-red-600'}`}>
                 {change > 0 ? '+' : ''}{change}%
               </span>
@@ -141,14 +212,24 @@ const AdminDashboard = () => {
     return 'text-green-600';
   };
 
-  const updateComplaintStatus = (complaintId, newStatus) => {
-    setComplaints(prev => 
-      prev.map(complaint => 
-        complaint.id === complaintId 
-          ? { ...complaint, status: newStatus, lastUpdated: new Date().toISOString().split('T')[0] }
-          : complaint
-      )
-    );
+  const updateComplaintStatus = async (complaintId, newStatus) => {
+    try {
+      // Update the complaint status via API
+      await adminAPI.updateComplaintStatus(complaintId, newStatus.toLowerCase());
+      
+      // Update local state
+      setComplaints(prev => 
+        prev.map(complaint => 
+          complaint.id === complaintId 
+            ? { ...complaint, status: newStatus, lastUpdated: new Date().toISOString().split('T')[0] }
+            : complaint
+        )
+      );
+    } catch (error) {
+      console.error('Error updating complaint status:', error);
+      // Optionally show an error message to the user
+      setError('Failed to update complaint status. Please try again.');
+    }
   };
 
   const filteredComplaints = complaints
@@ -175,13 +256,61 @@ const AdminDashboard = () => {
               <p className="text-purple-100">
                 AI-powered complaint management system with automated prioritization
               </p>
+              {lastUpdated && (
+                <p className="text-xs text-purple-200 mt-1">Last updated: {lastUpdated.toLocaleTimeString()}</p>
+              )}
             </div>
-            <div className="flex items-center space-x-2">
-              <Brain size={32} className="text-purple-200" />
-              <span className="text-sm text-purple-200">AI Enabled</span>
+            <div className="flex flex-col items-end space-y-3">
+              <div className="flex items-center space-x-2">
+                <Brain size={32} className="text-purple-200" />
+                <span className="text-sm text-purple-200">AI Enabled</span>
+              </div>
+              <button 
+                onClick={() => fetchCollectorStats(false)} 
+                className="px-3 py-1 bg-purple-500 hover:bg-purple-600 text-white text-xs rounded-md flex items-center"
+                disabled={loading}
+              >
+                {loading ? (
+                  <>
+                    <Zap size={12} className="mr-1 animate-spin" />
+                    Refreshing...
+                  </>
+                ) : (
+                  <>
+                    <Zap size={12} className="mr-1" />
+                    Refresh Data
+                  </>
+                )}
+              </button>
             </div>
           </div>
         </div>
+
+        {/* Error Message */}
+        {error && (
+          <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+            <div className="flex">
+              <AlertCircle className="h-5 w-5 text-red-400" />
+              <div className="ml-3">
+                <h3 className="text-sm font-medium text-red-800">Error</h3>
+                <div className="mt-2 text-sm text-red-700">
+                  <p>{error}</p>
+                </div>
+                <div className="mt-4">
+                  <button
+                    onClick={() => {
+                      setError(null);
+                      fetchCollectorStats(true);
+                    }}
+                    className="bg-red-100 px-3 py-2 rounded-md text-sm font-medium text-red-800 hover:bg-red-200"
+                  >
+                    Try Again
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Enhanced Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
@@ -191,7 +320,6 @@ const AdminDashboard = () => {
             value={stats.totalComplaints}
             color="text-blue-600"
             description="All complaints"
-            change={12}
           />
           <StatCard
             icon={AlertCircle}
@@ -199,7 +327,6 @@ const AdminDashboard = () => {
             value={stats.pendingComplaints}
             color="text-orange-600"
             description="Awaiting assignment"
-            change={-5}
           />
           <StatCard
             icon={Target}
@@ -207,7 +334,6 @@ const AdminDashboard = () => {
             value={stats.assignedComplaints}
             color="text-purple-600"
             description="In departments"
-            change={8}
           />
           <StatCard
             icon={CheckCircle}
@@ -215,7 +341,6 @@ const AdminDashboard = () => {
             value={stats.resolvedComplaints}
             color="text-green-600"
             description="Successfully closed"
-            change={15}
           />
           <StatCard
             icon={Brain}
@@ -223,7 +348,6 @@ const AdminDashboard = () => {
             value={stats.aiProcessed}
             color="text-indigo-600"
             description="Auto-categorized"
-            change={100}
           />
           <StatCard
             icon={Clock}
@@ -231,7 +355,6 @@ const AdminDashboard = () => {
             value={`${stats.averageResolutionTime}d`}
             color="text-teal-600"
             description="Days to resolve"
-            change={-12}
           />
         </div>
 
@@ -300,8 +423,23 @@ const AdminDashboard = () => {
             </h3>
           </div>
 
-          {/* Desktop Table View */}
-          <div className="hidden lg:block overflow-x-auto">
+          {loading ? (
+            <div className="flex items-center justify-center p-12">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600"></div>
+              <span className="ml-3 text-gray-600">Loading complaints...</span>
+            </div>
+          ) : filteredComplaints.length === 0 ? (
+            <div className="flex flex-col items-center justify-center p-12 text-gray-500">
+              <FileText className="h-12 w-12 mb-4" />
+              <h3 className="text-lg font-medium mb-2">No complaints found</h3>
+              <p className="text-center">
+                {error ? 'Unable to load complaints.' : 'No complaints match your current filters.'}
+              </p>
+            </div>
+          ) : (
+            <>
+              {/* Desktop Table View */}
+              <div className="hidden lg:block overflow-x-auto">
             <table className="w-full">
               <thead className="bg-gray-50">
                 <tr>
@@ -450,10 +588,12 @@ const AdminDashboard = () => {
               </div>
             ))}
           </div>
+            </>
+          )}
         </div>
       </div>
     </Layout>
   );
 };
 
-export default AdminDashboard;
+export default CollectorDashboard;

@@ -1,11 +1,12 @@
 from fastapi import APIRouter, HTTPException, status, Depends
 from fastapi.security import OAuth2PasswordBearer
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 from datetime import datetime, timedelta
 from .models import UserInDB
 from .db import users_collection, complaints_collection, admin_notes_collection
 from .auth_utils import verify_token, hash_password, verify_password, create_access_token, generate_otp, send_otp_email, get_otp_expiry
 from .db import otp_collection
+from .utils.json_utils import serialize_document
 import json
 from bson import ObjectId
 
@@ -24,7 +25,7 @@ def get_current_admin(token: str = Depends(oauth2_scheme)):
     return user
 
 @router.get("/dashboard-stats")
-async def get_dashboard_stats(period: str = "today", current_admin: dict = Depends(get_current_admin)):
+async def get_dashboard_stats(period: str = "today", current_admin: dict = Depends(get_current_admin)) -> Dict[str, Any]:
     """Get dashboard statistics for admin"""
     
     # Calculate date range based on period
@@ -97,12 +98,8 @@ async def get_dashboard_stats(period: str = "today", current_admin: dict = Depen
         limit=10
     ))
     
-    # Convert ObjectId to string for JSON serialization
-    for complaint in recent_complaints:
-        complaint["id"] = str(complaint["_id"])
-        complaint.pop("_id", None)
-    
-    return {
+    # Serialize the response
+    return serialize_document({
         "totalComplaints": total_complaints,
         "totalUsers": total_users,
         "pendingComplaints": pending_complaints,
@@ -116,7 +113,170 @@ async def get_dashboard_stats(period: str = "today", current_admin: dict = Depen
         "lowPriority": low_priority,
         "categories": categories,
         "recentComplaints": recent_complaints
-    }
+    })
+
+@router.get("/users")
+async def get_all_users(
+    skip: int = 0,
+    limit: int = 100,
+    current_admin: dict = Depends(get_current_admin)
+):
+    """Get all users for admin management"""
+    
+    # Get all non-admin users
+    users = list(users_collection.find(
+        {"is_admin": {"$ne": True}},
+        sort=[("created_at", -1)],
+        skip=skip,
+        limit=limit
+    ))
+    
+    # Add complaint count for each user
+    for user in users:
+        user_id = str(user["_id"])
+        user["complaints_count"] = complaints_collection.count_documents({"user_id": user_id})
+    
+    # Serialize the documents for JSON response
+    return serialize_document(users)
+
+@router.put("/users/{user_id}")
+async def update_user(
+    user_id: str,
+    update_data: dict,
+    current_admin: dict = Depends(get_current_admin)
+):
+    """Update user information"""
+    
+    try:
+        # Validate user_id format
+        try:
+            user_obj_id = ObjectId(user_id)
+        except:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid user ID format"
+            )
+        
+        # Don't allow updating admin status through this endpoint
+        if "is_admin" in update_data:
+            del update_data["is_admin"]
+        
+        # Update user
+        result = users_collection.update_one(
+            {"_id": user_obj_id},
+            {
+                "$set": {
+                    **update_data,
+                    "updated_at": datetime.utcnow(),
+                    "updated_by": current_admin["email"]
+                }
+            }
+        )
+        
+        if result.modified_count == 0:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User not found"
+            )
+        
+        return {"message": "User updated successfully"}
+        
+    except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Failed to update user"
+        )
+
+@router.delete("/users/{user_id}")
+async def delete_user(
+    user_id: str,
+    current_admin: dict = Depends(get_current_admin)
+):
+    """Delete user (admin only)"""
+    
+    try:
+        # Validate user_id format
+        try:
+            user_obj_id = ObjectId(user_id)
+        except:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid user ID format"
+            )
+        
+        # Check if user exists and is not admin
+        user = users_collection.find_one({"_id": user_obj_id})
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User not found"
+            )
+        
+        if user.get("is_admin"):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Cannot delete admin users"
+            )
+        
+        # Delete user
+        result = users_collection.delete_one({"_id": user_obj_id})
+        
+        if result.deleted_count == 0:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User not found"
+            )
+        
+        return {"message": "User deleted successfully"}
+        
+    except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Failed to delete user"
+        )
+
+@router.delete("/complaints/{complaint_id}")
+async def delete_complaint(
+    complaint_id: str,
+    current_admin: dict = Depends(get_current_admin)
+):
+    """Delete complaint (admin only)"""
+    
+    try:
+        # Validate complaint_id format
+        try:
+            complaint_obj_id = ObjectId(complaint_id)
+        except:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid complaint ID format"
+            )
+        
+        # Delete complaint
+        result = complaints_collection.delete_one({"_id": complaint_obj_id})
+        
+        if result.deleted_count == 0:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Complaint not found"
+            )
+        
+        # Also delete associated admin notes
+        admin_notes_collection.delete_many({"complaint_id": complaint_id})
+        
+        return {"message": "Complaint deleted successfully"}
+        
+    except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Failed to delete complaint"
+        )
 
 @router.get("/complaints")
 async def get_all_complaints(
@@ -146,12 +306,8 @@ async def get_all_complaints(
         limit=limit
     ))
     
-    # Convert ObjectId to string
-    for complaint in complaints:
-        complaint["id"] = str(complaint["_id"])
-        complaint.pop("_id", None)
-    
-    return complaints
+    # Serialize the documents for JSON response
+    return serialize_document(complaints)
 
 @router.get("/complaints/{complaint_id}")
 async def get_complaint_details(
@@ -162,16 +318,19 @@ async def get_complaint_details(
     
     try:
         # Get complaint
-        complaint = complaints_collection.find_one({"_id": ObjectId(complaint_id)})
+        try:
+            complaint = complaints_collection.find_one({"_id": ObjectId(complaint_id)})
+        except:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid complaint ID format"
+            )
+            
         if not complaint:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Complaint not found"
             )
-        
-        # Convert ObjectId to string
-        complaint["id"] = str(complaint["_id"])
-        complaint.pop("_id", None)
         
         # Get admin notes for this complaint
         notes = list(admin_notes_collection.find(
@@ -179,15 +338,10 @@ async def get_complaint_details(
             sort=[("created_at", -1)]
         ))
         
-        # Convert ObjectId to string for notes
-        for note in notes:
-            note["id"] = str(note["_id"])
-            note.pop("_id", None)
-        
-        return {
+        return serialize_document({
             "complaint": complaint,
             "notes": notes
-        }
+        })
         
     except Exception as e:
         raise HTTPException(

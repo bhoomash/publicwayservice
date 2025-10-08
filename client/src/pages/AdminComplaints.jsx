@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { adminAPI } from '../utils/api';
+import ComplaintDetailDrawer from '../components/ComplaintDetailDrawer';
 
 const AdminComplaints = () => {
   const [complaints, setComplaints] = useState([]);
@@ -8,6 +9,8 @@ const AdminComplaints = () => {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [selectedComplaintId, setSelectedComplaintId] = useState(null);
+  const [isDetailDrawerOpen, setIsDetailDrawerOpen] = useState(false);
   const [priorityFilter, setPriorityFilter] = useState('all');
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [sortBy, setSortBy] = useState('priority');
@@ -24,10 +27,12 @@ const AdminComplaints = () => {
   const loadComplaints = async () => {
     try {
       setLoading(true);
-      const data = await adminAPI.getAllComplaints();
-      setComplaints(data);
+      const response = await adminAPI.getAllComplaints();
+      // The response is already an array of complaints
+      setComplaints(response || []);
     } catch (error) {
       console.error('Error loading complaints:', error);
+      setComplaints([]);
     } finally {
       setLoading(false);
     }
@@ -76,25 +81,43 @@ const AdminComplaints = () => {
     setFilteredComplaints(filtered);
   };
 
-  const handleStatusUpdate = async (complaintId, newStatus) => {
+  const handleStatusUpdate = async (complaint, newStatus) => {
     try {
-      await adminAPI.updateComplaintStatus(complaintId, newStatus);
-      setComplaints(prev => prev.map(complaint =>
-        complaint.id === complaintId ? { ...complaint, status: newStatus } : complaint
+      // Ensure we're using the MongoDB _id
+      const id = complaint?._id || complaint?.id;
+      if (!id) throw new Error('Invalid complaint ID');
+
+      await adminAPI.updateComplaintStatus(id, newStatus);
+      setComplaints(prev => prev.map(item =>
+        (item._id === id || item.id === id) ? { ...item, status: newStatus } : item
       ));
     } catch (error) {
       console.error('Error updating status:', error);
     }
   };
 
-  const handleAssignDepartment = async (complaintId, department) => {
+  const handleAssignDepartment = async (complaint, department) => {
     try {
-      await adminAPI.assignComplaint(complaintId, department);
-      setComplaints(prev => prev.map(complaint =>
-        complaint.id === complaintId ? { ...complaint, assigned_department: department } : complaint
+      // Ensure we're using the MongoDB _id
+      const id = complaint?._id || complaint?.id;
+      if (!id) throw new Error('Invalid complaint ID');
+
+      await adminAPI.assignComplaint(id, department);
+      setComplaints(prev => prev.map(item =>
+        (item._id === id || item.id === id) ? { ...item, assigned_department: department } : item
       ));
     } catch (error) {
       console.error('Error assigning department:', error);
+    }
+  };
+
+  const getStatusLabel = (status) => {
+    switch (status) {
+      case 'pending': return 'Pending';
+      case 'in_progress': return 'In Progress';
+      case 'resolved': return 'Resolved';
+      case 'rejected': return 'Rejected';
+      default: return 'Pending';
     }
   };
 
@@ -224,7 +247,14 @@ const AdminComplaints = () => {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
         <div className="space-y-4">
           {filteredComplaints.map((complaint) => (
-            <div key={complaint.id} className="bg-white rounded-lg shadow-sm border border-gray-200 hover:shadow-md transition-shadow">
+            <div 
+              key={complaint.id} 
+              className="bg-white rounded-lg shadow-sm border border-gray-200 hover:shadow-md transition-shadow cursor-pointer"
+              onClick={() => {
+                setSelectedComplaintId(complaint.id);
+                setIsDetailDrawerOpen(true);
+              }}
+            >
               <div className="p-6">
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
@@ -233,10 +263,10 @@ const AdminComplaints = () => {
                         {complaint.priority?.toUpperCase() || 'UNKNOWN'}
                       </span>
                       <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(complaint.status)}`}>
-                        {complaint.status?.replace('_', ' ').toUpperCase() || 'PENDING'}
+                        {getStatusLabel(complaint.status)}
                       </span>
                       <span className="text-xs text-gray-500">
-                        #{complaint.id}
+                        #{complaint._id || complaint.id || 'NO-ID'}
                       </span>
                     </div>
                     
@@ -246,21 +276,27 @@ const AdminComplaints = () => {
                     
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm text-gray-600">
                       <div>
-                        <span className="font-medium">Submitted by:</span> {complaint.name || 'Anonymous'}
+                        <span className="font-medium">User Name:</span> {complaint.user_name || complaint.name || 'Anonymous'}
+                      </div>
+                      <div>
+                        <span className="font-medium">Email:</span> {complaint.user_email || '-'}
+                      </div>
+                      <div>
+                        <span className="font-medium">Date:</span> {new Date(complaint.created_at).toLocaleDateString()}
                       </div>
                       <div>
                         <span className="font-medium">Category:</span> {complaint.category || 'Other'}
                       </div>
                       <div>
-                        <span className="font-medium">Date:</span> {new Date(complaint.created_at).toLocaleDateString()}
+                        <span className="font-medium">Assigned Department:</span> {complaint.assigned_department || 'Not Assigned'}
+                      </div>
+                      <div>
+                        <span className="font-medium">Priority:</span> 
+                        <span className={`ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${getPriorityColor(complaint.priority)}`}>
+                          {complaint.priority?.charAt(0).toUpperCase() + complaint.priority?.slice(1) || 'UNKNOWN'}
+                        </span>
                       </div>
                     </div>
-                    
-                    {complaint.assigned_department && (
-                      <div className="mt-2 text-sm text-gray-600">
-                        <span className="font-medium">Assigned to:</span> {complaint.assigned_department}
-                      </div>
-                    )}
                   </div>
                   
                   <div className="flex items-center space-x-2 ml-4">
@@ -272,8 +308,8 @@ const AdminComplaints = () => {
                     </Link>
                     
                     <select
-                      value={complaint.status || 'pending'}
-                      onChange={(e) => handleStatusUpdate(complaint.id, e.target.value)}
+                      value={complaint?.status || 'pending'}
+                      onChange={(e) => handleStatusUpdate(complaint, e.target.value)}
                       className="border border-gray-300 rounded px-2 py-1 text-sm focus:ring-blue-500 focus:border-blue-500"
                     >
                       <option value="pending">Pending</option>
@@ -283,8 +319,8 @@ const AdminComplaints = () => {
                     </select>
                     
                     <select
-                      value={complaint.assigned_department || ''}
-                      onChange={(e) => handleAssignDepartment(complaint.id, e.target.value)}
+                      value={complaint?.assigned_department || ''}
+                      onChange={(e) => handleAssignDepartment(complaint, e.target.value)}
                       className="border border-gray-300 rounded px-2 py-1 text-sm focus:ring-blue-500 focus:border-blue-500"
                     >
                       <option value="">Assign Department</option>
@@ -313,6 +349,16 @@ const AdminComplaints = () => {
           )}
         </div>
       </div>
+
+      {/* Complaint Detail Drawer */}
+      <ComplaintDetailDrawer
+        isOpen={isDetailDrawerOpen}
+        onClose={() => {
+          setIsDetailDrawerOpen(false);
+          setSelectedComplaintId(null);
+        }}
+        complaintId={selectedComplaintId}
+      />
     </div>
   );
 };

@@ -1,6 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import toast from 'react-hot-toast';
 import Layout from '../components/Layout';
+import { complaintsAPI } from '../utils/api';
 import { 
   FileText, 
   Clock, 
@@ -12,7 +14,9 @@ import {
   Brain,
   Zap,
   Plus,
-  Sparkles
+  Sparkles,
+  RefreshCcw,
+  Loader2
 } from 'lucide-react';
 
 const Dashboard = () => {
@@ -25,29 +29,152 @@ const Dashboard = () => {
     aiProcessed: 0,
     averageResolutionTime: 0
   });
+  const [recentComplaints, setRecentComplaints] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [complaintsLoading, setComplaintsLoading] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState(null);
+  const [user, setUser] = useState(null);
+
+  // Fetch user dashboard stats
+  const fetchUserStats = useCallback(async (showLoading = true) => {
+    try {
+      if (showLoading) {
+        setLoading(true);
+      }
+      
+      const data = await complaintsAPI.getUserDashboardStats();
+      setStats({
+        totalComplaints: data.totalComplaints || 0,
+        pendingComplaints: data.pendingComplaints || 0,
+        resolvedComplaints: data.resolvedComplaints || 0,
+        inProgressComplaints: data.inProgressComplaints || 0,
+        aiProcessed: data.aiProcessed || 0,
+        averageResolutionTime: data.averageResolutionTime || 0
+      });
+      setLastUpdated(new Date());
+    } catch (error) {
+      console.error('Error fetching user dashboard stats:', error);
+      toast.error('Failed to load dashboard statistics');
+      
+      // Keep default stats if API fails
+      setStats({
+        totalComplaints: 0,
+        pendingComplaints: 0,
+        resolvedComplaints: 0,
+        inProgressComplaints: 0,
+        aiProcessed: 0,
+        averageResolutionTime: 0
+      });
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  // Fetch recent complaints
+  const fetchRecentComplaints = useCallback(async () => {
+    if (!user?._id) return;
+    
+    try {
+      setComplaintsLoading(true);
+      const complaints = await complaintsAPI.getUserComplaints(user._id, { limit: 3 });
+      setRecentComplaints(complaints || []);
+    } catch (error) {
+      console.error('Error fetching recent complaints:', error);
+      toast.error('Failed to load recent complaints');
+      setRecentComplaints([]);
+    } finally {
+      setComplaintsLoading(false);
+    }
+  }, [user?._id]);
 
   useEffect(() => {
     // Check if user is admin and redirect to admin dashboard
     try {
-      const user = JSON.parse(localStorage.getItem('user') || '{}');
-      if (user.role === 'admin' || user.is_admin) {
+      const userData = JSON.parse(localStorage.getItem('user') || '{}');
+      if (userData.role === 'admin' || userData.is_admin) {
         navigate('/admin', { replace: true });
         return;
       }
+      setUser(userData);
     } catch (error) {
       console.error('Error parsing user data:', error);
     }
 
-    // TODO: Fetch actual stats from API
-    setStats({
-      totalComplaints: 12,
-      pendingComplaints: 3,
-      resolvedComplaints: 7,
-      inProgressComplaints: 2,
-      aiProcessed: 12,
-      averageResolutionTime: 2.5
-    });
-  }, []);
+    // Fetch initial data
+    fetchUserStats();
+  }, [navigate, fetchUserStats]);
+
+  // Fetch recent complaints when user is set
+  useEffect(() => {
+    if (user?._id) {
+      fetchRecentComplaints();
+    }
+  }, [user, fetchRecentComplaints]);
+
+  // Auto-refresh every 60 seconds
+  useEffect(() => {
+    const interval = setInterval(() => {
+      fetchUserStats(false); // Don't show loading spinner for auto-refresh
+      if (user?._id) {
+        fetchRecentComplaints();
+      }
+    }, 60000); // 60 seconds
+
+    return () => clearInterval(interval);
+  }, [fetchUserStats, fetchRecentComplaints, user?._id]);
+
+  // Loading skeleton component
+  const StatCardSkeleton = () => (
+    <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 animate-pulse">
+      <div className="flex items-center justify-between">
+        <div className="flex-1">
+          <div className="h-4 bg-gray-200 rounded w-3/4 mb-2"></div>
+          <div className="h-8 bg-gray-200 rounded w-1/2 mb-1"></div>
+          <div className="h-3 bg-gray-200 rounded w-2/3"></div>
+        </div>
+        <div className="w-12 h-12 bg-gray-200 rounded-lg"></div>
+      </div>
+    </div>
+  );
+
+  const ComplaintCardSkeleton = () => (
+    <div className="bg-gradient-to-br from-gray-50 to-blue-50 rounded-lg p-4 border border-blue-100 animate-pulse">
+      <div className="flex items-center justify-between mb-2">
+        <div className="h-5 bg-gray-200 rounded w-1/2"></div>
+        <div className="flex items-center space-x-2">
+          <div className="h-6 bg-gray-200 rounded-full w-16"></div>
+          <div className="h-5 bg-gray-200 rounded w-8"></div>
+        </div>
+      </div>
+      <div className="flex items-center space-x-4 mb-3">
+        <div className="h-4 bg-gray-200 rounded w-16"></div>
+        <div className="h-4 bg-gray-200 rounded w-20"></div>
+        <div className="h-4 bg-gray-200 rounded w-20"></div>
+      </div>
+      <div className="bg-white rounded-lg p-3 border-l-4 border-purple-500">
+        <div className="h-3 bg-gray-200 rounded w-1/4 mb-2"></div>
+        <div className="h-4 bg-gray-200 rounded w-full mb-2"></div>
+        <div className="h-3 bg-gray-200 rounded w-3/4"></div>
+      </div>
+    </div>
+  );
+
+  // Handle quick action navigation
+  const handleQuickAction = useCallback((action) => {
+    switch (action) {
+      case 'submit':
+        navigate('/submit-complaint');
+        break;
+      case 'track':
+        navigate('/my-complaints');
+        break;
+      case 'assistant':
+        navigate('/help');
+        break;
+      default:
+        break;
+    }
+  }, [navigate]);
 
   const StatCard = ({ icon: Icon, title, value, color, description }) => (
     <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow">
@@ -63,45 +190,6 @@ const Dashboard = () => {
       </div>
     </div>
   );
-
-  const recentComplaints = [
-    {
-      id: 'CMP001',
-      title: 'Street Light Not Working',
-      status: 'In Progress',
-      date: '2025-08-15',
-      category: 'Infrastructure',
-      aiResponse: 'Automated assignment to Municipal Corporation. Estimated resolution: 2-3 days.',
-      priorityScore: 75,
-      aiProcessed: true,
-      vectorDbId: 'vec_abc123',
-      similarComplaintsCount: 3
-    },
-    {
-      id: 'CMP002',
-      title: 'Water Supply Issue',
-      status: 'Pending',
-      date: '2025-08-14',
-      category: 'Utilities',
-      aiResponse: 'High priority issue affecting multiple households. Emergency response recommended.',
-      priorityScore: 90,
-      aiProcessed: true,
-      vectorDbId: 'vec_def456',
-      similarComplaintsCount: 2
-    },
-    {
-      id: 'CMP003',
-      title: 'Road Repair Required',
-      status: 'Resolved',
-      date: '2025-08-13',
-      category: 'Infrastructure',
-      aiResponse: 'Standard maintenance request. Completed within expected timeframe.',
-      priorityScore: 60,
-      aiProcessed: true,
-      vectorDbId: 'vec_ghi789',
-      similarComplaintsCount: 5
-    }
-  ];
 
   const getStatusColor = (status) => {
     switch (status) {
@@ -130,58 +218,90 @@ const Dashboard = () => {
               <p className="text-blue-100">
                 AI-powered complaint tracking and management system
               </p>
+              {lastUpdated && (
+                <p className="text-xs text-blue-200 mt-1">Last updated: {lastUpdated.toLocaleTimeString()}</p>
+              )}
             </div>
-            <div className="flex items-center space-x-2">
-              <Brain size={32} className="text-blue-200" />
-              <span className="text-sm text-blue-200">AI Enabled</span>
+            <div className="flex flex-col items-end space-y-3">
+              <div className="flex items-center space-x-2">
+                <Brain size={32} className="text-blue-200" />
+                <span className="text-sm text-blue-200">AI Enabled</span>
+              </div>
+              <button 
+                onClick={() => fetchUserStats(false)} 
+                className="px-3 py-1 bg-blue-500 hover:bg-blue-600 text-white text-xs rounded-md flex items-center focus:outline-none focus:ring-2 focus:ring-blue-300 focus:ring-offset-2"
+                disabled={loading}
+                aria-label="Refresh dashboard data"
+              >
+                {loading ? (
+                  <>
+                    <RefreshCcw size={12} className="mr-1 animate-spin" />
+                    Refreshing...
+                  </>
+                ) : (
+                  <>
+                    <RefreshCcw size={12} className="mr-1" />
+                    Refresh Data
+                  </>
+                )}
+              </button>
             </div>
           </div>
         </div>
 
         {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
-          <StatCard
-            icon={FileText}
-            title="Total Complaints"
-            value={stats.totalComplaints}
-            color="text-blue-600"
-            description="All time complaints"
-          />
-          <StatCard
-            icon={AlertCircle}
-            title="Pending"
-            value={stats.pendingComplaints}
-            color="text-orange-600"
-            description="Awaiting review"
-          />
-          <StatCard
-            icon={TrendingUp}
-            title="In Progress"
-            value={stats.inProgressComplaints}
-            color="text-blue-600"
-            description="Being processed"
-          />
-          <StatCard
-            icon={CheckCircle}
-            title="Resolved"
-            value={stats.resolvedComplaints}
-            color="text-green-600"
-            description="Successfully closed"
-          />
-          <StatCard
-            icon={Brain}
-            title="AI Processed"
-            value={stats.aiProcessed}
-            color="text-purple-600"
-            description="Auto-categorized"
-          />
-          <StatCard
-            icon={Clock}
-            title="Avg Resolution"
-            value={`${stats.averageResolutionTime}d`}
-            color="text-teal-600"
-            description="Days to resolve"
-          />
+          {loading ? (
+            // Show skeleton loading for stats
+            Array.from({ length: 6 }).map((_, index) => (
+              <StatCardSkeleton key={index} />
+            ))
+          ) : (
+            <>
+              <StatCard
+                icon={FileText}
+                title="Total Complaints"
+                value={stats.totalComplaints}
+                color="text-blue-600"
+                description="All time complaints"
+              />
+              <StatCard
+                icon={AlertCircle}
+                title="Pending"
+                value={stats.pendingComplaints}
+                color="text-orange-600"
+                description="Awaiting review"
+              />
+              <StatCard
+                icon={TrendingUp}
+                title="In Progress"
+                value={stats.inProgressComplaints}
+                color="text-blue-600"
+                description="Being processed"
+              />
+              <StatCard
+                icon={CheckCircle}
+                title="Resolved"
+                value={stats.resolvedComplaints}
+                color="text-green-600"
+                description="Successfully closed"
+              />
+              <StatCard
+                icon={Brain}
+                title="AI Processed"
+                value={stats.aiProcessed}
+                color="text-purple-600"
+                description="Auto-categorized"
+              />
+              <StatCard
+                icon={Clock}
+                title="Avg Resolution"
+                value={`${stats.averageResolutionTime}d`}
+                color="text-teal-600"
+                description="Days to resolve"
+              />
+            </>
+          )}
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -195,58 +315,83 @@ const Dashboard = () => {
             </div>
             <div className="p-6">
               <div className="space-y-4">
-                {recentComplaints.map((complaint) => (
-                  <div key={complaint.id} className="bg-gradient-to-br from-gray-50 to-blue-50 rounded-lg p-4 border border-blue-100">
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center space-x-2">
-                        <h4 className="font-medium text-gray-800">{complaint.title}</h4>
-                        {complaint.aiProcessed && (
-                          <span className="px-2 py-0.5 bg-gradient-to-r from-purple-100 to-blue-100 text-purple-700 rounded-full text-xs font-medium flex items-center">
-                            <Brain size={10} className="mr-1" />
-                            AI
+                {complaintsLoading ? (
+                  // Show skeleton loading for complaints
+                  Array.from({ length: 3 }).map((_, index) => (
+                    <ComplaintCardSkeleton key={index} />
+                  ))
+                ) : recentComplaints.length > 0 ? (
+                  recentComplaints.map((complaint) => (
+                    <div key={complaint.id || complaint._id} className="bg-gradient-to-br from-gray-50 to-blue-50 rounded-lg p-4 border border-blue-100">
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center space-x-2">
+                          <h4 className="font-medium text-gray-800">{complaint.title}</h4>
+                          {complaint.aiProcessed && (
+                            <span className="px-2 py-0.5 bg-gradient-to-r from-purple-100 to-blue-100 text-purple-700 rounded-full text-xs font-medium flex items-center">
+                              <Brain size={10} className="mr-1" />
+                              AI
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(complaint.status)}`}>
+                            {complaint.status}
+                          </span>
+                          <span className={`text-sm font-bold ${getPriorityColor(complaint.priorityScore || 50)}`}>
+                            {complaint.priorityScore || 50}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="flex items-center text-sm text-gray-600 space-x-4 mb-3">
+                        <span className="font-medium">ID: {complaint.id || complaint._id}</span>
+                        <span>{complaint.category || 'General'}</span>
+                        <span>{new Date(complaint.date || complaint.created_at).toLocaleDateString()}</span>
+                        {(complaint.similarComplaintsCount > 0 || complaint.similarComplaints?.length > 0) && (
+                          <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full flex items-center">
+                            <TrendingUp size={10} className="mr-1" />
+                            {complaint.similarComplaintsCount || complaint.similarComplaints?.length || 0} similar
                           </span>
                         )}
                       </div>
-                      <div className="flex items-center space-x-2">
-                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(complaint.status)}`}>
-                          {complaint.status}
-                        </span>
-                        <span className={`text-sm font-bold ${getPriorityColor(complaint.priorityScore)}`}>
-                          {complaint.priorityScore}
-                        </span>
-                      </div>
-                    </div>
-                    <div className="flex items-center text-sm text-gray-600 space-x-4 mb-3">
-                      <span className="font-medium">ID: {complaint.id}</span>
-                      <span>{complaint.category}</span>
-                      <span>{complaint.date}</span>
-                      {complaint.similarComplaintsCount > 0 && (
-                        <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full flex items-center">
-                          <TrendingUp size={10} className="mr-1" />
-                          {complaint.similarComplaintsCount} similar
-                        </span>
+                      {complaint.aiResponse && (
+                        <div className="bg-white rounded-lg p-3 border-l-4 border-purple-500 shadow-sm">
+                          <div className="flex items-start space-x-2">
+                            <Sparkles size={16} className="text-purple-600 mt-0.5 flex-shrink-0" />
+                            <div className="flex-1">
+                              <p className="text-xs text-purple-600 font-semibold mb-1">AI Analysis</p>
+                              <p className="text-sm text-gray-700 mb-2">{complaint.aiResponse}</p>
+                              {complaint.vectorDbId && (
+                                <div className="flex items-center text-xs text-gray-500">
+                                  <Zap size={10} className="mr-1" />
+                                  <span>Vector DB: {complaint.vectorDbId.substring(0, 12)}...</span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
                       )}
                     </div>
-                    <div className="bg-white rounded-lg p-3 border-l-4 border-purple-500 shadow-sm">
-                      <div className="flex items-start space-x-2">
-                        <Sparkles size={16} className="text-purple-600 mt-0.5 flex-shrink-0" />
-                        <div className="flex-1">
-                          <p className="text-xs text-purple-600 font-semibold mb-1">AI Analysis</p>
-                          <p className="text-sm text-gray-700 mb-2">{complaint.aiResponse}</p>
-                          {complaint.vectorDbId && (
-                            <div className="flex items-center text-xs text-gray-500">
-                              <Zap size={10} className="mr-1" />
-                              <span>Vector DB: {complaint.vectorDbId.substring(0, 12)}...</span>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </div>
+                  ))
+                ) : (
+                  <div className="text-center py-8">
+                    <FileText className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                    <h3 className="text-lg font-medium text-gray-900 mb-2">No complaints yet</h3>
+                    <p className="text-gray-600 mb-4">Get started by submitting your first complaint</p>
+                    <button 
+                      onClick={() => handleQuickAction('submit')}
+                      className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                    >
+                      Submit Complaint
+                    </button>
                   </div>
-                ))}
+                )}
               </div>
               <div className="mt-4 text-center">
-                <button className="text-blue-600 hover:text-blue-700 font-medium text-sm">
+                <button 
+                  onClick={() => navigate('/my-complaints')}
+                  className="text-blue-600 hover:text-blue-700 font-medium text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 rounded px-2 py-1"
+                  aria-label="View all complaints"
+                >
                   View All Complaints →
                 </button>
               </div>
@@ -263,7 +408,11 @@ const Dashboard = () => {
             </div>
             <div className="p-6">
               <div className="space-y-4">
-                <button className="w-full p-4 text-left bg-blue-50 hover:bg-blue-100 rounded-lg border-2 border-dashed border-blue-200 transition-colors group">
+                <button 
+                  onClick={() => handleQuickAction('submit')}
+                  className="w-full p-4 text-left bg-blue-50 hover:bg-blue-100 rounded-lg border-2 border-dashed border-blue-200 transition-colors group focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                  aria-label="Submit new complaint"
+                >
                   <div className="flex items-center">
                     <div className="p-2 bg-blue-100 rounded-lg mr-3 group-hover:bg-blue-200 transition-colors">
                       <Plus size={20} className="text-blue-600" />
@@ -275,7 +424,11 @@ const Dashboard = () => {
                   </div>
                 </button>
                 
-                <button className="w-full p-4 text-left bg-green-50 hover:bg-green-100 rounded-lg border-2 border-dashed border-green-200 transition-colors group">
+                <button 
+                  onClick={() => handleQuickAction('track')}
+                  className="w-full p-4 text-left bg-green-50 hover:bg-green-100 rounded-lg border-2 border-dashed border-green-200 transition-colors group focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2"
+                  aria-label="Track your complaints"
+                >
                   <div className="flex items-center">
                     <div className="p-2 bg-green-100 rounded-lg mr-3 group-hover:bg-green-200 transition-colors">
                       <BarChart3 size={20} className="text-green-600" />
@@ -287,7 +440,11 @@ const Dashboard = () => {
                   </div>
                 </button>
                 
-                <button className="w-full p-4 text-left bg-purple-50 hover:bg-purple-100 rounded-lg border-2 border-dashed border-purple-200 transition-colors group">
+                <button 
+                  onClick={() => handleQuickAction('assistant')}
+                  className="w-full p-4 text-left bg-purple-50 hover:bg-purple-100 rounded-lg border-2 border-dashed border-purple-200 transition-colors group focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2"
+                  aria-label="Get help from AI assistant"
+                >
                   <div className="flex items-center">
                     <div className="p-2 bg-purple-100 rounded-lg mr-3 group-hover:bg-purple-200 transition-colors">
                       <Brain size={20} className="text-purple-600" />
@@ -324,15 +481,30 @@ const Dashboard = () => {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="bg-white rounded-lg p-4 border border-purple-100">
               <h4 className="font-medium text-gray-800 mb-2">Priority Alerts</h4>
-              <p className="text-sm text-gray-600">1 high-priority complaint requires immediate attention</p>
+              <p className="text-sm text-gray-600">
+                {stats.pendingComplaints > 0 
+                  ? `${stats.pendingComplaints} complaint${stats.pendingComplaints > 1 ? 's' : ''} awaiting review`
+                  : 'No pending complaints'
+                }
+              </p>
             </div>
             <div className="bg-white rounded-lg p-4 border border-purple-100">
-              <h4 className="font-medium text-gray-800 mb-2">Department Load</h4>
-              <p className="text-sm text-gray-600">Municipal Corp has 40% capacity, can handle more cases</p>
+              <h4 className="font-medium text-gray-800 mb-2">AI Processing</h4>
+              <p className="text-sm text-gray-600">
+                {stats.aiProcessed > 0
+                  ? `${stats.aiProcessed} complaint${stats.aiProcessed > 1 ? 's' : ''} processed by AI`
+                  : 'No AI-processed complaints yet'
+                }
+              </p>
             </div>
             <div className="bg-white rounded-lg p-4 border border-purple-100">
-              <h4 className="font-medium text-gray-800 mb-2">Trends</h4>
-              <p className="text-sm text-gray-600">Infrastructure complaints increased 15% this week</p>
+              <h4 className="font-medium text-gray-800 mb-2">Resolution Time</h4>
+              <p className="text-sm text-gray-600">
+                {stats.averageResolutionTime > 0
+                  ? `Average ${stats.averageResolutionTime} day${stats.averageResolutionTime > 1 ? 's' : ''} to resolve`
+                  : 'No resolution data available'
+                }
+              </p>
             </div>
           </div>
         </div>

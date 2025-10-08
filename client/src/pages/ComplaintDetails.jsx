@@ -1,6 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import toast from 'react-hot-toast';
 import Layout from '../components/Layout';
+import { complaintsAPI, adminAPI } from '../utils/api';
 import { 
   ArrowLeft, 
   User, 
@@ -22,7 +24,9 @@ import {
   Database,
   TrendingUp,
   Lightbulb,
-  Zap
+  Zap,
+  Loader2,
+  X
 } from 'lucide-react';
 
 const ComplaintDetails = () => {
@@ -30,89 +34,101 @@ const ComplaintDetails = () => {
   const navigate = useNavigate();
   const [complaint, setComplaint] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [statusUpdate, setStatusUpdate] = useState('');
   const [newNote, setNewNote] = useState('');
+  const [isUpdating, setIsUpdating] = useState(false);
+  const [isAddingNote, setIsAddingNote] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [showAIResponse, setShowAIResponse] = useState(true);
 
-  useEffect(() => {
-    // TODO: Fetch actual complaint details from API
-    const mockComplaint = {
-      id: 'CMP001',
-      userId: 'user123',
-      userName: 'John Doe',
-      userEmail: 'john.doe@email.com',
-      userPhone: '+1-555-0123',
-      title: 'Street Light Not Working',
-      description: 'The street light in front of house number 123 has been non-functional for the past week. This is causing safety concerns for residents, especially during evening hours. Multiple neighbors have complained about the darkness making it difficult to walk safely. The light pole appears intact, but the bulb or electrical connection seems to be the issue.',
-      category: 'Infrastructure',
-      urgency: 'high',
-      status: 'Assigned',
-      priority_score: 85,
-      assignedDepartment: 'Municipal Corporation - Electrical Division',
-      aiResponse: 'Based on the description, this appears to be an electrical infrastructure issue requiring immediate attention. The complaint indicates a non-functional street light affecting public safety. Recommended action: Dispatch electrical maintenance team for inspection and repair. Priority level: High due to safety concerns. Estimated resolution time: 24-48 hours.',
-      aiProcessed: true,
-      vectorDbId: 'vec_5f8a2b3c4d1e',
-      submittedDate: '2025-08-15T10:30:00Z',
-      lastUpdated: '2025-08-16T14:20:00Z',
-      location: '123 Main Street, Downtown',
-      attachments: [
-        { name: 'streetlight_image.jpg', size: '2.3 MB', type: 'image' },
-        { name: 'location_map.pdf', size: '1.1 MB', type: 'pdf' }
-      ],
-      statusHistory: [
-        { date: '2025-08-16T14:20:00Z', status: 'Assigned', note: 'Assigned to Municipal Corporation - Electrical Division', updatedBy: 'AI System' },
-        { date: '2025-08-15T10:30:00Z', status: 'Submitted', note: 'Complaint submitted and processed by AI', updatedBy: 'John Doe' }
-      ],
-      notes: [
-        { date: '2025-08-16T15:00:00Z', note: 'Electrical team has been notified. Will inspect tomorrow morning.', addedBy: 'Admin' }
-      ],
-      similarComplaints: [
-        { id: 'CMP045', title: 'Broken Street Light on Oak Street', similarity: 0.92, status: 'Resolved' },
-        { id: 'CMP078', title: 'Non-functioning street lights in downtown area', similarity: 0.87, status: 'In Progress' },
-        { id: 'CMP012', title: 'Dark street - light not working', similarity: 0.85, status: 'Resolved' }
-      ],
-      aiRecommendations: [
-        'Prioritize this complaint due to public safety concerns',
-        'Consider preventive maintenance for nearby street lights',
-        'Schedule inspection during evening hours to verify the issue',
-        'Coordinate with electrical department for faster resolution'
-      ]
-    };
-    
-    setComplaint(mockComplaint);
-    setIsLoading(false);
-  }, [id]);
-
-  const getStatusIcon = (status) => {
+  // Memoized helper functions for better performance
+  const getStatusIcon = useMemo(() => (status) => {
     switch (status) {
-      case 'Resolved': return <CheckCircle size={20} className="text-green-600" />;
-      case 'In Progress': return <Clock size={20} className="text-blue-600" />;
-      case 'Assigned': return <Target size={20} className="text-blue-600" />;
-      default: return <AlertCircle size={20} className="text-orange-600" />;
+      case 'Resolved': return <CheckCircle size={20} className="text-green-600" aria-label="Resolved status" />;
+      case 'In Progress': return <Clock size={20} className="text-blue-600" aria-label="In Progress status" />;
+      case 'Assigned': return <Target size={20} className="text-blue-600" aria-label="Assigned status" />;
+      default: return <AlertCircle size={20} className="text-orange-600" aria-label="Pending status" />;
     }
-  };
+  }, []);
 
-  const getStatusColor = (status) => {
+  const getStatusColor = useMemo(() => (status) => {
     switch (status) {
       case 'Resolved': return 'text-green-600 bg-green-100 border-green-200';
       case 'In Progress': return 'text-blue-600 bg-blue-100 border-blue-200';
       case 'Assigned': return 'text-blue-600 bg-blue-100 border-blue-200';
       default: return 'text-orange-600 bg-orange-100 border-orange-200';
     }
-  };
+  }, []);
 
-  const getUrgencyColor = (urgency) => {
+  const getUrgencyColor = useMemo(() => (urgency) => {
     switch (urgency) {
       case 'high': return 'text-red-600 bg-red-100 border-red-200';
       case 'medium': return 'text-yellow-600 bg-yellow-100 border-yellow-200';
       case 'low': return 'text-green-600 bg-green-100 border-green-200';
       default: return 'text-gray-600 bg-gray-100 border-gray-200';
     }
-  };
+  }, []);
 
-  const handleStatusUpdate = () => {
-    if (statusUpdate) {
-      // TODO: Implement API call to update status
+  // Date formatting helper
+  const formatDate = useCallback((dateString) => {
+    try {
+      return new Date(dateString).toLocaleString('en-IN', {
+        year: 'numeric',
+        month: 'short',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    } catch (error) {
+      return 'Invalid Date';
+    }
+  }, []);
+
+  const formatDateOnly = useCallback((dateString) => {
+    try {
+      return new Date(dateString).toLocaleDateString('en-IN', {
+        year: 'numeric',
+        month: 'short',
+        day: '2-digit'
+      });
+    } catch (error) {
+      return 'Invalid Date';
+    }
+  }, []);
+
+  // Fetch complaint data from API
+  const fetchComplaint = useCallback(async () => {
+    if (!id) return;
+    
+    try {
+      setIsLoading(true);
+      setError(null);
+      const complaintData = await complaintsAPI.getComplaintById(id);
+      setComplaint(complaintData);
+    } catch (err) {
+      console.error('Error fetching complaint:', err);
+      setError('Failed to load complaint details');
+      toast.error('Failed to load complaint details');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [id]);
+
+  useEffect(() => {
+    fetchComplaint();
+  }, [fetchComplaint]);
+
+  // Handle status update with API call
+  const handleStatusUpdate = useCallback(async () => {
+    if (!statusUpdate || !complaint?.id) return;
+    
+    try {
+      setIsUpdating(true);
+      await adminAPI.updateComplaintStatus(complaint.id, statusUpdate);
+      
+      // Update local state
       const newStatusEntry = {
         date: new Date().toISOString(),
         status: statusUpdate,
@@ -124,17 +140,29 @@ const ComplaintDetails = () => {
         ...prev,
         status: statusUpdate,
         lastUpdated: new Date().toISOString(),
-        statusHistory: [newStatusEntry, ...prev.statusHistory]
+        statusHistory: [newStatusEntry, ...(prev.statusHistory || [])]
       }));
       
       setStatusUpdate('');
       setNewNote('');
+      toast.success('Status updated successfully');
+    } catch (error) {
+      console.error('Error updating status:', error);
+      toast.error('Failed to update status');
+    } finally {
+      setIsUpdating(false);
     }
-  };
+  }, [statusUpdate, newNote, complaint?.id]);
 
-  const addNote = () => {
-    if (newNote) {
-      // TODO: Implement API call to add note
+  // Add note with API call
+  const addNote = useCallback(async () => {
+    if (!newNote || !complaint?.id) return;
+    
+    try {
+      setIsAddingNote(true);
+      await adminAPI.addComplaintNote(complaint.id, newNote);
+      
+      // Update local state
       const note = {
         date: new Date().toISOString(),
         note: newNote,
@@ -143,18 +171,74 @@ const ComplaintDetails = () => {
       
       setComplaint(prev => ({
         ...prev,
-        notes: [note, ...prev.notes]
+        notes: [note, ...(prev.notes || [])]
       }));
       
       setNewNote('');
+      toast.success('Note added successfully');
+    } catch (error) {
+      console.error('Error adding note:', error);
+      toast.error('Failed to add note');
+    } finally {
+      setIsAddingNote(false);
     }
-  };
+  }, [newNote, complaint?.id]);
+
+  // Handle complaint deletion
+  const handleDeleteComplaint = useCallback(async () => {
+    if (!complaint?.id) return;
+    
+    try {
+      setIsDeleting(true);
+      await adminAPI.deleteComplaint(complaint.id);
+      toast.success('Complaint deleted successfully');
+      navigate('/admin/complaints');
+    } catch (error) {
+      console.error('Error deleting complaint:', error);
+      toast.error('Failed to delete complaint');
+    } finally {
+      setIsDeleting(false);
+      setShowDeleteModal(false);
+    }
+  }, [complaint?.id, navigate]);
+
+  // Navigate to similar complaint
+  const handleSimilarComplaintClick = useCallback((similarId) => {
+    navigate(`/admin/complaints/${similarId}`);
+  }, [navigate]);
 
   if (isLoading) {
     return (
       <Layout title="Loading...">
-        <div className="flex items-center justify-center h-64">
+        <div className="flex items-center justify-center h-64" role="status" aria-label="Loading complaint details">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+          <span className="ml-3 text-gray-600">Loading complaint details...</span>
+        </div>
+      </Layout>
+    );
+  }
+
+  if (error) {
+    return (
+      <Layout title="Error">
+        <div className="text-center py-12">
+          <AlertCircle className="h-16 w-16 text-red-500 mx-auto mb-4" />
+          <h2 className="text-2xl font-bold text-gray-800 mb-4">Error Loading Complaint</h2>
+          <p className="text-gray-600 mb-6">{error}</p>
+          <div className="space-x-4">
+            <button 
+              onClick={() => navigate(-1)}
+              className="text-blue-600 hover:text-blue-700 transition-colors"
+            >
+              Go Back
+            </button>
+            <button 
+              onClick={fetchComplaint}
+              className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              Try Again
+            </button>
+          </div>
         </div>
       </Layout>
     );
@@ -165,9 +249,10 @@ const ComplaintDetails = () => {
       <Layout title="Complaint Not Found">
         <div className="text-center py-12">
           <h2 className="text-2xl font-bold text-gray-800 mb-4">Complaint Not Found</h2>
+          <p className="text-gray-600 mb-6">The complaint you're looking for doesn't exist or has been removed.</p>
           <button 
             onClick={() => navigate(-1)}
-            className="text-blue-600 hover:text-blue-700"
+            className="text-blue-600 hover:text-blue-700 transition-colors"
           >
             Go Back
           </button>
@@ -178,37 +263,40 @@ const ComplaintDetails = () => {
 
   return (
     <Layout title={`Complaint ${complaint.id}`}>
-      <div className="max-w-6xl mx-auto space-y-6">
+      <div className="max-w-6xl mx-auto space-y-6 p-4">
         {/* Back Button */}
-        <button
-          onClick={() => navigate(-1)}
-          className="flex items-center text-blue-600 hover:text-blue-700 font-medium"
-        >
-          <ArrowLeft size={20} className="mr-2" />
-          Back to Dashboard
-        </button>
+        <nav aria-label="Breadcrumb">
+          <button
+            onClick={() => navigate(-1)}
+            className="flex items-center text-blue-600 hover:text-blue-700 font-medium transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 rounded-lg px-2 py-1"
+            aria-label="Go back to previous page"
+          >
+            <ArrowLeft size={20} className="mr-2" aria-hidden="true" />
+            Back to Dashboard
+          </button>
+        </nav>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Main Content */}
-          <div className="lg:col-span-2 space-y-6">
+          <main className="lg:col-span-2 space-y-6">
             {/* Complaint Header */}
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+            <header className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 transition-shadow duration-200 hover:shadow-md">
               <div className="flex items-start justify-between mb-4">
                 <div>
                   <h1 className="text-2xl font-bold text-gray-800 mb-2">{complaint.title}</h1>
-                  <div className="flex items-center space-x-4">
+                  <div className="flex items-center space-x-4 flex-wrap gap-2">
                     <span className="text-sm text-gray-600">ID: {complaint.id}</span>
-                    <span className={`inline-flex items-center px-3 py-1 text-sm font-medium rounded-full border ${getStatusColor(complaint.status)}`}>
+                    <span className={`inline-flex items-center px-3 py-1 text-sm font-medium rounded-full border transition-colors ${getStatusColor(complaint.status)}`}>
                       {getStatusIcon(complaint.status)}
                       <span className="ml-2">{complaint.status}</span>
                     </span>
-                    <span className={`inline-flex px-3 py-1 text-sm font-medium rounded-full border ${getUrgencyColor(complaint.urgency)}`}>
-                      {complaint.urgency.toUpperCase()} PRIORITY
+                    <span className={`inline-flex px-3 py-1 text-sm font-medium rounded-full border transition-colors ${getUrgencyColor(complaint.urgency)}`}>
+                      {(complaint.urgency || 'medium').toUpperCase()} PRIORITY
                     </span>
                   </div>
                 </div>
                 <div className="text-right">
-                  <div className="text-2xl font-bold text-blue-600">{complaint.priority_score}</div>
+                  <div className="text-2xl font-bold text-blue-600">{complaint.priority_score || 'N/A'}</div>
                   <div className="text-xs text-gray-500">Priority Score</div>
                 </div>
               </div>
@@ -216,59 +304,59 @@ const ComplaintDetails = () => {
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
                 <div>
                   <span className="text-gray-600">Category:</span>
-                  <p className="font-medium">{complaint.category}</p>
+                  <p className="font-medium">{complaint.category || 'General'}</p>
                 </div>
                 <div>
                   <span className="text-gray-600">Submitted:</span>
-                  <p className="font-medium">{new Date(complaint.submittedDate).toLocaleDateString()}</p>
+                  <p className="font-medium">{formatDateOnly(complaint.submittedDate || complaint.created_at)}</p>
                 </div>
                 <div>
                   <span className="text-gray-600">Last Updated:</span>
-                  <p className="font-medium">{new Date(complaint.lastUpdated).toLocaleDateString()}</p>
+                  <p className="font-medium">{formatDateOnly(complaint.lastUpdated || complaint.updated_at)}</p>
                 </div>
               </div>
-            </div>
+            </header>
 
             {/* User Information */}
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+            <section className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 transition-shadow duration-200 hover:shadow-md">
               <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
-                <User size={20} className="mr-2 text-blue-600" />
+                <User size={20} className="mr-2 text-blue-600" aria-hidden="true" />
                 User Information
               </h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="flex items-center space-x-3">
-                  <div className="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center">
-                    <span className="text-white font-medium">{complaint.userName.charAt(0)}</span>
+                  <div className="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center" aria-hidden="true">
+                    <span className="text-white font-medium">{(complaint.userName || complaint.user_name || 'U').charAt(0)}</span>
                   </div>
                   <div>
-                    <p className="font-medium text-gray-800">{complaint.userName}</p>
+                    <p className="font-medium text-gray-800">{complaint.userName || complaint.user_name || 'Unknown User'}</p>
                     <p className="text-sm text-gray-600">Citizen</p>
                   </div>
                 </div>
                 <div className="space-y-2">
                   <div className="flex items-center text-sm text-gray-600">
-                    <Mail size={16} className="mr-2" />
-                    {complaint.userEmail}
+                    <Mail size={16} className="mr-2" aria-hidden="true" />
+                    {complaint.userEmail || complaint.email || 'Not provided'}
                   </div>
-                  {complaint.userPhone && (
+                  {(complaint.userPhone || complaint.phone) && (
                     <div className="flex items-center text-sm text-gray-600">
-                      <FileText size={16} className="mr-2" />
-                      {complaint.userPhone}
+                      <FileText size={16} className="mr-2" aria-hidden="true" />
+                      {complaint.userPhone || complaint.phone}
                     </div>
                   )}
                 </div>
               </div>
-            </div>
+            </section>
 
             {/* Description */}
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+            <section className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 transition-shadow duration-200 hover:shadow-md">
               <h3 className="text-lg font-semibold text-gray-800 mb-4">Description</h3>
-              <p className="text-gray-700 leading-relaxed">{complaint.description}</p>
+              <p className="text-gray-700 leading-relaxed">{complaint.description || 'No description provided'}</p>
               
               {complaint.location && (
                 <div className="mt-4 p-4 bg-gray-50 rounded-lg">
                   <div className="flex items-start">
-                    <MapPin size={16} className="mr-2 mt-1 text-gray-500" />
+                    <MapPin size={16} className="mr-2 mt-1 text-gray-500" aria-hidden="true" />
                     <div>
                       <span className="text-sm text-gray-600">Location:</span>
                       <p className="font-medium text-gray-800">{complaint.location}</p>
@@ -276,7 +364,7 @@ const ComplaintDetails = () => {
                   </div>
                 </div>
               )}
-            </div>
+            </section>
 
             {/* AI Processing Status */}
             {complaint.aiProcessed && (
@@ -327,9 +415,9 @@ const ComplaintDetails = () => {
 
             {/* Similar Complaints */}
             {complaint.similarComplaints && complaint.similarComplaints.length > 0 && (
-              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+              <section className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 transition-shadow duration-200 hover:shadow-md">
                 <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
-                  <TrendingUp size={20} className="mr-2 text-blue-600" />
+                  <TrendingUp size={20} className="mr-2 text-blue-600" aria-hidden="true" />
                   Similar Complaints ({complaint.similarComplaints.length})
                 </h3>
                 <p className="text-sm text-gray-600 mb-4">
@@ -337,12 +425,17 @@ const ComplaintDetails = () => {
                 </p>
                 <div className="space-y-3">
                   {complaint.similarComplaints.map((similar, index) => (
-                    <div key={index} className="bg-blue-50 border border-blue-200 rounded-lg p-4 hover:shadow-md transition-shadow">
+                    <button
+                      key={index}
+                      onClick={() => handleSimilarComplaintClick(similar.id)}
+                      className="w-full bg-blue-50 border border-blue-200 rounded-lg p-4 hover:shadow-md hover:bg-blue-100 transition-all duration-200 text-left focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                      aria-label={`View similar complaint: ${similar.title}`}
+                    >
                       <div className="flex items-center justify-between mb-2">
                         <h4 className="font-medium text-gray-800 flex-1">{similar.title}</h4>
                         <div className="flex items-center space-x-2">
                           <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-medium">
-                            {Math.round(similar.similarity * 100)}% match
+                            {Math.round((similar.similarity || 0) * 100)}% match
                           </span>
                           <span className={`px-2 py-1 rounded-full text-xs font-medium ${
                             similar.status === 'Resolved' ? 'bg-green-100 text-green-700' :
@@ -354,10 +447,10 @@ const ComplaintDetails = () => {
                         </div>
                       </div>
                       <div className="text-xs text-gray-600">Complaint ID: {similar.id}</div>
-                    </div>
+                    </button>
                   ))}
                 </div>
-              </div>
+              </section>
             )}
 
             {/* AI Recommendations */}
@@ -432,12 +525,12 @@ const ComplaintDetails = () => {
                 </div>
               </div>
             )}
-          </div>
+          </main>
 
           {/* Sidebar */}
-          <div className="space-y-6">
+          <aside className="space-y-6" aria-label="Complaint actions and details">
             {/* Quick Actions */}
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+            <section className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 transition-shadow duration-200 hover:shadow-md">
               <h3 className="text-lg font-semibold text-gray-800 mb-4">Quick Actions</h3>
               
               {/* Status Update */}
@@ -449,7 +542,8 @@ const ComplaintDetails = () => {
                   <select
                     value={statusUpdate}
                     onChange={(e) => setStatusUpdate(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                    disabled={isUpdating}
                   >
                     <option value="">Select status...</option>
                     <option value="Assigned">Assigned</option>
@@ -466,29 +560,62 @@ const ComplaintDetails = () => {
                     value={newNote}
                     onChange={(e) => setNewNote(e.target.value)}
                     placeholder="Add a note about this status update..."
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
                     rows={3}
+                    disabled={isUpdating}
                   />
                 </div>
                 
                 <button
                   onClick={handleStatusUpdate}
-                  disabled={!statusUpdate}
-                  className="w-full bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  disabled={!statusUpdate || isUpdating}
+                  className="w-full bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200 flex items-center justify-center"
                 >
-                  Update Status
+                  {isUpdating ? (
+                    <>
+                      <Loader2 size={16} className="animate-spin mr-2" />
+                      Updating...
+                    </>
+                  ) : (
+                    'Update Status'
+                  )}
+                </button>
+
+                {/* Add Note Button */}
+                <button
+                  onClick={addNote}
+                  disabled={!newNote || isAddingNote}
+                  className="w-full bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200 flex items-center justify-center"
+                >
+                  {isAddingNote ? (
+                    <>
+                      <Loader2 size={16} className="animate-spin mr-2" />
+                      Adding Note...
+                    </>
+                  ) : (
+                    'Add Note'
+                  )}
+                </button>
+
+                {/* Delete Complaint Button */}
+                <button
+                  onClick={() => setShowDeleteModal(true)}
+                  className="w-full bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors duration-200 flex items-center justify-center"
+                >
+                  <Trash2 size={16} className="mr-2" />
+                  Delete Complaint
                 </button>
               </div>
-            </div>
+            </section>
 
             {/* Status History */}
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+            <section className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 transition-shadow duration-200 hover:shadow-md">
               <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
-                <Clock size={20} className="mr-2 text-blue-600" />
+                <Clock size={20} className="mr-2 text-blue-600" aria-hidden="true" />
                 Status History
               </h3>
               <div className="space-y-4">
-                {complaint.statusHistory.map((entry, index) => (
+                {(complaint.statusHistory || []).map((entry, index) => (
                   <div key={index} className="flex items-start space-x-3">
                     <div className="flex-shrink-0 w-2 h-2 bg-blue-600 rounded-full mt-2"></div>
                     <div className="flex-1">
@@ -497,7 +624,7 @@ const ComplaintDetails = () => {
                           {entry.status}
                         </span>
                         <span className="text-xs text-gray-500">
-                          {new Date(entry.date).toLocaleDateString()}
+                          {formatDateOnly(entry.date)}
                         </span>
                       </div>
                       <p className="text-sm text-gray-600 mt-1">{entry.note}</p>
@@ -506,11 +633,11 @@ const ComplaintDetails = () => {
                   </div>
                 ))}
               </div>
-            </div>
+            </section>
 
             {/* Notes */}
             {complaint.notes && complaint.notes.length > 0 && (
-              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+              <section className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 transition-shadow duration-200 hover:shadow-md">
                 <h3 className="text-lg font-semibold text-gray-800 mb-4">Notes</h3>
                 <div className="space-y-3">
                   {complaint.notes.map((note, index) => (
@@ -518,15 +645,55 @@ const ComplaintDetails = () => {
                       <p className="text-sm text-gray-700">{note.note}</p>
                       <div className="flex justify-between items-center mt-2 text-xs text-gray-500">
                         <span>by {note.addedBy}</span>
-                        <span>{new Date(note.date).toLocaleDateString()}</span>
+                        <span>{formatDateOnly(note.date)}</span>
                       </div>
                     </div>
                   ))}
                 </div>
-              </div>
+              </section>
             )}
-          </div>
+          </aside>
         </div>
+
+        {/* Delete Confirmation Modal */}
+        {showDeleteModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" role="dialog" aria-modal="true" aria-labelledby="delete-modal-title">
+            <div className="bg-white rounded-lg max-w-md w-full mx-4">
+              <div className="p-6">
+                <div className="flex items-center mb-4">
+                  <AlertCircle className="h-8 w-8 text-red-600 mr-3" aria-hidden="true" />
+                  <h2 id="delete-modal-title" className="text-xl font-bold">Delete Complaint</h2>
+                </div>
+                <p className="text-gray-600 mb-6">
+                  Are you sure you want to delete this complaint? This action cannot be undone and will permanently remove all associated data.
+                </p>
+                <div className="flex justify-end space-x-3">
+                  <button
+                    onClick={() => setShowDeleteModal(false)}
+                    disabled={isDeleting}
+                    className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleDeleteComplaint}
+                    disabled={isDeleting}
+                    className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors flex items-center"
+                  >
+                    {isDeleting ? (
+                      <>
+                        <Loader2 size={16} className="animate-spin mr-2" />
+                        Deleting...
+                      </>
+                    ) : (
+                      'Delete Complaint'
+                    )}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </Layout>
   );

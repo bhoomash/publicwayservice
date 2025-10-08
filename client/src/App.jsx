@@ -49,12 +49,16 @@ const isAdmin = () => {
   const userInfo = getUserInfo();
   if (!userInfo) return false;
   
-  // Check multiple possible admin indicators
-  return (
-    userInfo.role === 'admin' ||
-    userInfo.is_admin === true ||
-    userInfo.email === 'anirudh200503@gmail.com' // Admin email
-  );
+  // Primary check: is_admin flag (preferred)
+  if (userInfo.is_admin === true) return true;
+  
+  // Secondary check: role
+  if (userInfo.role === 'admin') return true;
+  
+  // Emergency fallback: specific admin email
+  if (userInfo.email === 'anirudh200503@gmail.com') return true;
+  
+  return false;
 };
 
 // Protected Route for regular users

@@ -12,6 +12,27 @@ import {
   Calendar,
   User
 } from 'lucide-react';
+import {
+  getPriorityColorClass,
+  getStatusColorClass,
+  getStatusLabel,
+  normalizeComplaintsData
+} from '../../utils/normalizeData';
+
+// Local utility function for status icons
+const getStatusIcon = (status) => {
+  const statusLower = (status || '').toLowerCase();
+  switch (statusLower) {
+    case 'pending':
+      return <Clock size={12} />;
+    case 'in_progress':
+      return <AlertCircle size={12} />;
+    case 'resolved':
+      return <CheckCircle size={12} />;
+    default:
+      return <Clock size={12} />;
+  }
+};
 
 const AllComplaints = () => {
   const [complaints, setComplaints] = useState([]);
@@ -21,9 +42,13 @@ const AllComplaints = () => {
   const [priorityFilter, setPriorityFilter] = useState('all');
   const [loading, setLoading] = useState(true);
   const [selectedComplaint, setSelectedComplaint] = useState(null);
+  const [departments, setDepartments] = useState([]);
+  const [notes, setNotes] = useState({}); // Per-complaint notes storage
+  const [showModal, setShowModal] = useState(false);
 
   useEffect(() => {
     fetchComplaints();
+    fetchDepartments();
   }, []);
 
   useEffect(() => {
@@ -33,46 +58,69 @@ const AllComplaints = () => {
   const fetchComplaints = async () => {
     try {
       setLoading(true);
+      // console.log('🔄 Fetching all complaints...');
       const response = await adminAPI.getAllComplaints();
-      setComplaints(response.data.complaints || []);
+      // console.log('📊 All complaints response:', response);
+      
+      // Handle different response structures
+      const complaintsData = Array.isArray(response) 
+        ? response 
+        : (response?.complaints || response?.data || []);
+      
+      // console.log('📝 Processed complaints data:', complaintsData);
+      setComplaints(complaintsData);
     } catch (error) {
-      console.error('Error fetching complaints:', error);
+      console.error('❌ Error fetching complaints:', error);
+      setComplaints([]);
     } finally {
       setLoading(false);
     }
   };
 
   const filterComplaints = () => {
+    if (!Array.isArray(complaints)) {
+      setFilteredComplaints([]);
+      return;
+    }
+
     let filtered = complaints;
 
     // Search filter
     if (searchTerm) {
+      const searchLower = searchTerm.toLowerCase();
       filtered = filtered.filter(complaint =>
-        complaint.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        complaint.userName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        complaint.userEmail.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        complaint.category.toLowerCase().includes(searchTerm.toLowerCase())
+        String(complaint.message || '').toLowerCase().includes(searchLower) ||
+        String(complaint.user_name || '').toLowerCase().includes(searchLower) ||
+        String(complaint.user_email || '').toLowerCase().includes(searchLower) ||
+        String(complaint.category || '').toLowerCase().includes(searchLower)
       );
     }
 
     // Status filter
     if (statusFilter !== 'all') {
-      filtered = filtered.filter(complaint => complaint.status === statusFilter);
+      filtered = filtered.filter(complaint => 
+        (complaint.status || '').toLowerCase() === statusFilter.toLowerCase()
+      );
     }
 
     // Priority filter
     if (priorityFilter !== 'all') {
-      filtered = filtered.filter(complaint => complaint.priority_score === priorityFilter);
+      filtered = filtered.filter(complaint => 
+        (complaint.priority || '').toLowerCase() === priorityFilter.toLowerCase()
+      );
     }
 
     setFilteredComplaints(filtered);
   };
 
-  const categorizeComplaintsByPriority = (complaints) => {
+  const categorizeComplaintsByPriority = (complaints = []) => {
+    if (!Array.isArray(complaints)) return { high: [], medium: [], low: [] };
+    
     return complaints.reduce((acc, complaint) => {
-      if (complaint.priority_score === 'high') {
+      const priority = (complaint.priority || 'low').toLowerCase();
+      if (priority === 'high') {
         acc.high.push(complaint);
-      } else if (complaint.priority_score === 'medium') {
+      } else if (priority === 'medium') {
         acc.medium.push(complaint);
       } else {
         acc.low.push(complaint);
@@ -81,51 +129,77 @@ const AllComplaints = () => {
     }, { high: [], medium: [], low: [] });
   };
 
+  const fetchDepartments = async () => {
+    try {
+      const response = await adminAPI.getDepartments();
+      setDepartments(response || []);
+    } catch (error) {
+      console.error('Error fetching departments:', error);
+      setDepartments([]);
+    }
+  };
+
   const updateComplaintStatus = async (complaintId, newStatus) => {
     try {
       await adminAPI.updateComplaintStatus(complaintId, newStatus);
-      setComplaints(complaints.map(complaint =>
-        complaint.id === complaintId ? { ...complaint, status: newStatus } : complaint
-      ));
+      await fetchComplaints();
+      if (selectedComplaint?.id === complaintId) {
+        const updatedComplaint = await adminAPI.getComplaintById(complaintId);
+        setSelectedComplaint(updatedComplaint);
+      }
     } catch (error) {
       console.error('Error updating complaint status:', error);
     }
   };
 
-  const getStatusColor = (status) => {
-    switch (status) {
-      case 'Assigned': return 'border-blue-200 text-blue-800 bg-blue-50';
-      case 'In Progress': return 'border-yellow-200 text-yellow-800 bg-yellow-50';
-      case 'Resolved': return 'border-green-200 text-green-800 bg-green-50';
-      default: return 'border-gray-200 text-gray-800 bg-gray-50';
+  const assignDepartment = async (complaintId, department) => {
+    try {
+      await adminAPI.assignComplaint(complaintId, department);
+      await fetchComplaints();
+      if (selectedComplaint?.id === complaintId) {
+        const updatedComplaint = await adminAPI.getComplaintById(complaintId);
+        setSelectedComplaint(updatedComplaint);
+      }
+    } catch (error) {
+      console.error('Error assigning department:', error);
     }
   };
 
-  const getPriorityColor = (priority) => {
-    switch (priority) {
-      case 'high': return 'bg-red-100 text-red-800';
-      case 'medium': return 'bg-yellow-100 text-yellow-800';
-      case 'low': return 'bg-green-100 text-green-800';
-      default: return 'bg-gray-100 text-gray-800';
+  const addNote = async (complaintId) => {
+    const noteText = notes[complaintId];
+    if (!noteText?.trim()) return;
+    
+    try {
+      await adminAPI.addComplaintNote(complaintId, noteText);
+      // Clear only this complaint's note
+      setNotes(prev => ({ ...prev, [complaintId]: '' }));
+      await fetchComplaints();
+      if (selectedComplaint?.id === complaintId) {
+        const updatedComplaint = await adminAPI.getComplaintById(complaintId);
+        setSelectedComplaint(updatedComplaint);
+      }
+    } catch (error) {
+      console.error('Error adding note:', error);
     }
   };
 
-  const getUrgencyColor = (urgency) => {
-    switch (urgency?.toLowerCase()) {
-      case 'high': return 'border-red-200 text-red-800 bg-red-50';
-      case 'medium': return 'border-yellow-200 text-yellow-800 bg-yellow-50';
-      case 'low': return 'border-green-200 text-green-800 bg-green-50';
-      default: return 'border-gray-200 text-gray-800 bg-gray-50';
+  // Handle opening complaint details modal
+  const openComplaintDetails = async (complaint) => {
+    try {
+      const detailedComplaint = await adminAPI.getComplaintById(complaint.id);
+      setSelectedComplaint(detailedComplaint);
+      setShowModal(true);
+    } catch (error) {
+      console.error('Error fetching complaint details:', error);
+      // Fallback to basic complaint data
+      setSelectedComplaint(complaint);
+      setShowModal(true);
     }
   };
 
-  const getStatusIcon = (status) => {
-    switch (status) {
-      case 'Assigned': return <Clock size={12} />;
-      case 'In Progress': return <AlertCircle size={12} />;
-      case 'Resolved': return <CheckCircle size={12} />;
-      default: return <Clock size={12} />;
-    }
+  // Handle updating note input for specific complaint
+  const updateNote = (complaintId, value) => {
+    setNotes(prev => ({ ...prev, [complaintId]: value }));
   };
 
   if (loading) {
@@ -174,9 +248,10 @@ const AllComplaints = () => {
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               >
                 <option value="all">All Status</option>
-                <option value="Assigned">Assigned</option>
-                <option value="In Progress">In Progress</option>
-                <option value="Resolved">Resolved</option>
+                <option value="pending">Pending</option>
+                <option value="in_progress">In Progress</option>
+                <option value="resolved">Resolved</option>
+                <option value="rejected">Rejected</option>
               </select>
             </div>
 
@@ -203,7 +278,7 @@ const AllComplaints = () => {
           </div>
         </div>
 
-        {/* Priority-Based Complaints Sections */}
+        {/* Complaint Sections */}
         <div className="space-y-6">
           {/* High Priority Complaints */}
           {prioritizedComplaints.high.length > 0 && (
@@ -243,16 +318,17 @@ const AllComplaints = () => {
                             <div className="flex-shrink-0 h-10 w-10">
                               <div className="h-10 w-10 rounded-full bg-red-600 flex items-center justify-center">
                                 <span className="text-sm font-medium text-white">
-                                  {complaint.userName.charAt(0)}
+                                  {String(complaint.user_name || 'A').charAt(0).toUpperCase()}
                                 </span>
                               </div>
                             </div>
                             <div className="ml-4">
                               <div className="text-sm font-medium text-gray-900">
-                                {complaint.title}
+                                {complaint.message ? complaint.message.substring(0, 100) : 'No message'}
+                                {complaint.message?.length > 100 ? '...' : ''}
                               </div>
                               <div className="text-sm text-gray-500">
-                                {complaint.userName} • {complaint.userEmail}
+                                {complaint.user_name || 'Anonymous'} • {complaint.user_email || 'No email'}
                               </div>
                               <div className="text-xs text-gray-400">
                                 ID: {complaint.id}
@@ -263,43 +339,76 @@ const AllComplaints = () => {
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="space-y-2">
                             <span className="inline-flex px-2 py-1 text-xs font-medium bg-gray-100 text-gray-800 rounded-full">
-                              {complaint.category}
+                              {complaint.category || 'Uncategorized'}
                             </span>
                             <div>
-                              <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${getPriorityColor(complaint.priority_score)}`}>
-                                HIGH PRIORITY
+                              <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${getPriorityColorClass(complaint.priority)}`}>
+                                {(complaint.priority || 'Low').toUpperCase()} PRIORITY
                               </span>
                             </div>
                           </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="space-y-2">
-                            <span className={`inline-flex items-center px-2 py-1 text-xs font-medium rounded-full border ${getStatusColor(complaint.status)}`}>
+                            <span className={`inline-flex items-center px-2 py-1 text-xs font-medium rounded-full border ${getStatusColorClass(complaint.status)}`}>
                               {getStatusIcon(complaint.status)}
-                              <span className="ml-1">{complaint.status}</span>
+                              <span className="ml-1">{getStatusLabel(complaint.status)}</span>
                             </span>
                             <div className="text-xs text-gray-600">
                               <Building size={12} className="inline mr-1" />
-                              {complaint.assignedDepartment}
+                              {complaint.assigned_department || 'Not Assigned'}
                             </div>
                           </div>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
-                          <button
-                            onClick={() => setSelectedComplaint(complaint)}
-                            className="text-blue-600 hover:text-blue-900"
-                          >
-                            <Eye size={16} />
-                          </button>
-                          <select
-                            value={complaint.status}
-                            onChange={(e) => updateComplaintStatus(complaint.id, e.target.value)}
-                            className="text-xs border border-gray-300 rounded px-2 py-1"
-                          >
-                            <option value="Assigned">Assigned</option>
-                            <option value="In Progress">In Progress</option>
-                            <option value="Resolved">Resolved</option>
-                          </select>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-y-2">
+                          <div className="flex space-x-2 items-center">
+                            <button
+                              onClick={() => openComplaintDetails(complaint)}
+                              className="text-blue-600 hover:text-blue-900"
+                              title="View Details"
+                            >
+                              <Eye size={16} />
+                            </button>
+                            <select
+                              value={complaint.status || 'pending'}
+                              onChange={(e) => updateComplaintStatus(complaint.id, e.target.value)}
+                              className="text-xs border border-gray-300 rounded px-2 py-1"
+                            >
+                              <option value="pending">Pending</option>
+                              <option value="in_progress">In Progress</option>
+                              <option value="resolved">Resolved</option>
+                              <option value="rejected">Rejected</option>
+                            </select>
+                          </div>
+                          <div>
+                            <select
+                              value={complaint.assigned_department || ''}
+                              onChange={(e) => assignDepartment(complaint.id, e.target.value)}
+                              className="text-xs border border-gray-300 rounded px-2 py-1 w-full"
+                            >
+                              <option value="">Assign Department</option>
+                              {departments.map(dept => (
+                                <option key={dept.id || dept.name} value={dept.name}>
+                                  {dept.name}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                          <div className="flex space-x-2">
+                            <input
+                              type="text"
+                              placeholder="Add note..."
+                              value={notes[complaint.id] || ''}
+                              onChange={(e) => updateNote(complaint.id, e.target.value)}
+                              className="text-xs border border-gray-300 rounded px-2 py-1 flex-1"
+                            />
+                            <button
+                              onClick={() => addNote(complaint.id)}
+                              className="text-xs bg-blue-600 text-white px-2 py-1 rounded hover:bg-blue-700"
+                            >
+                              Add
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -347,16 +456,17 @@ const AllComplaints = () => {
                             <div className="flex-shrink-0 h-10 w-10">
                               <div className="h-10 w-10 rounded-full bg-yellow-600 flex items-center justify-center">
                                 <span className="text-sm font-medium text-white">
-                                  {complaint.userName.charAt(0)}
+                                  {String(complaint.user_name || 'A').charAt(0).toUpperCase()}
                                 </span>
                               </div>
                             </div>
                             <div className="ml-4">
                               <div className="text-sm font-medium text-gray-900">
-                                {complaint.title}
+                                {complaint.message ? complaint.message.substring(0, 100) : 'No message'}
+                                {complaint.message?.length > 100 ? '...' : ''}
                               </div>
                               <div className="text-sm text-gray-500">
-                                {complaint.userName} • {complaint.userEmail}
+                                {complaint.user_name || 'Anonymous'} • {complaint.user_email || 'No email'}
                               </div>
                               <div className="text-xs text-gray-400">
                                 ID: {complaint.id}
@@ -367,43 +477,76 @@ const AllComplaints = () => {
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="space-y-2">
                             <span className="inline-flex px-2 py-1 text-xs font-medium bg-gray-100 text-gray-800 rounded-full">
-                              {complaint.category}
+                              {complaint.category || 'Uncategorized'}
                             </span>
                             <div>
-                              <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${getPriorityColor(complaint.priority_score)}`}>
-                                MEDIUM PRIORITY
+                              <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${getPriorityColorClass(complaint.priority)}`}>
+                                {(complaint.priority || 'Medium').toUpperCase()} PRIORITY
                               </span>
                             </div>
                           </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="space-y-2">
-                            <span className={`inline-flex items-center px-2 py-1 text-xs font-medium rounded-full border ${getStatusColor(complaint.status)}`}>
+                            <span className={`inline-flex items-center px-2 py-1 text-xs font-medium rounded-full border ${getStatusColorClass(complaint.status)}`}>
                               {getStatusIcon(complaint.status)}
-                              <span className="ml-1">{complaint.status}</span>
+                              <span className="ml-1">{getStatusLabel(complaint.status)}</span>
                             </span>
                             <div className="text-xs text-gray-600">
                               <Building size={12} className="inline mr-1" />
-                              {complaint.assignedDepartment}
+                              {complaint.assigned_department || 'Not Assigned'}
                             </div>
                           </div>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
-                          <button
-                            onClick={() => setSelectedComplaint(complaint)}
-                            className="text-blue-600 hover:text-blue-900"
-                          >
-                            <Eye size={16} />
-                          </button>
-                          <select
-                            value={complaint.status}
-                            onChange={(e) => updateComplaintStatus(complaint.id, e.target.value)}
-                            className="text-xs border border-gray-300 rounded px-2 py-1"
-                          >
-                            <option value="Assigned">Assigned</option>
-                            <option value="In Progress">In Progress</option>
-                            <option value="Resolved">Resolved</option>
-                          </select>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-y-2">
+                          <div className="flex space-x-2 items-center">
+                            <button
+                              onClick={() => openComplaintDetails(complaint)}
+                              className="text-blue-600 hover:text-blue-900"
+                              title="View Details"
+                            >
+                              <Eye size={16} />
+                            </button>
+                            <select
+                              value={complaint.status || 'pending'}
+                              onChange={(e) => updateComplaintStatus(complaint.id, e.target.value)}
+                              className="text-xs border border-gray-300 rounded px-2 py-1"
+                            >
+                              <option value="pending">Pending</option>
+                              <option value="in_progress">In Progress</option>
+                              <option value="resolved">Resolved</option>
+                              <option value="rejected">Rejected</option>
+                            </select>
+                          </div>
+                          <div>
+                            <select
+                              value={complaint.assigned_department || ''}
+                              onChange={(e) => assignDepartment(complaint.id, e.target.value)}
+                              className="text-xs border border-gray-300 rounded px-2 py-1 w-full"
+                            >
+                              <option value="">Assign Department</option>
+                              {departments.map(dept => (
+                                <option key={dept.id || dept.name} value={dept.name}>
+                                  {dept.name}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                          <div className="flex space-x-2">
+                            <input
+                              type="text"
+                              placeholder="Add note..."
+                              value={notes[complaint.id] || ''}
+                              onChange={(e) => updateNote(complaint.id, e.target.value)}
+                              className="text-xs border border-gray-300 rounded px-2 py-1 flex-1"
+                            />
+                            <button
+                              onClick={() => addNote(complaint.id)}
+                              className="text-xs bg-blue-600 text-white px-2 py-1 rounded hover:bg-blue-700"
+                            >
+                              Add
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -451,16 +594,17 @@ const AllComplaints = () => {
                             <div className="flex-shrink-0 h-10 w-10">
                               <div className="h-10 w-10 rounded-full bg-green-600 flex items-center justify-center">
                                 <span className="text-sm font-medium text-white">
-                                  {complaint.userName.charAt(0)}
+                                  {String(complaint.user_name || 'A').charAt(0).toUpperCase()}
                                 </span>
                               </div>
                             </div>
                             <div className="ml-4">
                               <div className="text-sm font-medium text-gray-900">
-                                {complaint.title}
+                                {complaint.message ? complaint.message.substring(0, 100) : 'No message'}
+                                {complaint.message?.length > 100 ? '...' : ''}
                               </div>
                               <div className="text-sm text-gray-500">
-                                {complaint.userName} • {complaint.userEmail}
+                                {complaint.user_name || 'Anonymous'} • {complaint.user_email || 'No email'}
                               </div>
                               <div className="text-xs text-gray-400">
                                 ID: {complaint.id}
@@ -471,43 +615,76 @@ const AllComplaints = () => {
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="space-y-2">
                             <span className="inline-flex px-2 py-1 text-xs font-medium bg-gray-100 text-gray-800 rounded-full">
-                              {complaint.category}
+                              {complaint.category || 'Uncategorized'}
                             </span>
                             <div>
-                              <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${getPriorityColor(complaint.priority_score)}`}>
-                                LOW PRIORITY
+                              <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${getPriorityColorClass(complaint.priority)}`}>
+                                {(complaint.priority || 'Low').toUpperCase()} PRIORITY
                               </span>
                             </div>
                           </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="space-y-2">
-                            <span className={`inline-flex items-center px-2 py-1 text-xs font-medium rounded-full border ${getStatusColor(complaint.status)}`}>
+                            <span className={`inline-flex items-center px-2 py-1 text-xs font-medium rounded-full border ${getStatusColorClass(complaint.status)}`}>
                               {getStatusIcon(complaint.status)}
-                              <span className="ml-1">{complaint.status}</span>
+                              <span className="ml-1">{getStatusLabel(complaint.status)}</span>
                             </span>
                             <div className="text-xs text-gray-600">
                               <Building size={12} className="inline mr-1" />
-                              {complaint.assignedDepartment}
+                              {complaint.assigned_department || 'Not Assigned'}
                             </div>
                           </div>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
-                          <button
-                            onClick={() => setSelectedComplaint(complaint)}
-                            className="text-blue-600 hover:text-blue-900"
-                          >
-                            <Eye size={16} />
-                          </button>
-                          <select
-                            value={complaint.status}
-                            onChange={(e) => updateComplaintStatus(complaint.id, e.target.value)}
-                            className="text-xs border border-gray-300 rounded px-2 py-1"
-                          >
-                            <option value="Assigned">Assigned</option>
-                            <option value="In Progress">In Progress</option>
-                            <option value="Resolved">Resolved</option>
-                          </select>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-y-2">
+                          <div className="flex space-x-2 items-center">
+                            <button
+                              onClick={() => openComplaintDetails(complaint)}
+                              className="text-blue-600 hover:text-blue-900"
+                              title="View Details"
+                            >
+                              <Eye size={16} />
+                            </button>
+                            <select
+                              value={complaint.status || 'pending'}
+                              onChange={(e) => updateComplaintStatus(complaint.id, e.target.value)}
+                              className="text-xs border border-gray-300 rounded px-2 py-1"
+                            >
+                              <option value="pending">Pending</option>
+                              <option value="in_progress">In Progress</option>
+                              <option value="resolved">Resolved</option>
+                              <option value="rejected">Rejected</option>
+                            </select>
+                          </div>
+                          <div>
+                            <select
+                              value={complaint.assigned_department || ''}
+                              onChange={(e) => assignDepartment(complaint.id, e.target.value)}
+                              className="text-xs border border-gray-300 rounded px-2 py-1 w-full"
+                            >
+                              <option value="">Assign Department</option>
+                              {departments.map(dept => (
+                                <option key={dept.id || dept.name} value={dept.name}>
+                                  {dept.name}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                          <div className="flex space-x-2">
+                            <input
+                              type="text"
+                              placeholder="Add note..."
+                              value={notes[complaint.id] || ''}
+                              onChange={(e) => updateNote(complaint.id, e.target.value)}
+                              className="text-xs border border-gray-300 rounded px-2 py-1 flex-1"
+                            />
+                            <button
+                              onClick={() => addNote(complaint.id)}
+                              className="text-xs bg-blue-600 text-white px-2 py-1 rounded hover:bg-blue-700"
+                            >
+                              Add
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -516,17 +693,116 @@ const AllComplaints = () => {
               </div>
             </div>
           )}
-        </div>
 
-        {/* Empty State */}
-        {filteredComplaints.length === 0 && !loading && (
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-12 text-center">
-            <AlertCircle className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-            <h3 className="text-lg font-medium text-gray-900 mb-2">No complaints found</h3>
-            <p className="text-gray-500">Try adjusting your search or filter criteria.</p>
-          </div>
-        )}
+          {/* Empty State */}
+          {filteredComplaints.length === 0 && !loading && (
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-12 text-center">
+              <AlertCircle className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+              <h3 className="text-lg font-medium text-gray-900 mb-2">No complaints found</h3>
+              <p className="text-gray-500">Try adjusting your search or filter criteria.</p>
+            </div>
+          )}
+        </div>
       </div>
+
+      {/* Complaint Details Modal */}
+      {showModal && selectedComplaint && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg max-w-4xl w-full mx-4 max-h-screen overflow-y-auto">
+            <div className="p-6 border-b">
+              <div className="flex justify-between items-center">
+                <h2 className="text-xl font-bold">Complaint Details</h2>
+                <button
+                  onClick={() => setShowModal(false)}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+            <div className="p-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <h3 className="text-lg font-semibold mb-4">Basic Information</h3>
+                  <div className="space-y-3">
+                    <div>
+                      <label className="text-sm font-medium text-gray-500">ID</label>
+                      <p className="text-sm">{selectedComplaint.complaint_id || selectedComplaint.id}</p>
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-gray-500">Title</label>
+                      <p className="text-sm">{selectedComplaint.title || selectedComplaint.subject || 'No title'}</p>
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-gray-500">Description</label>
+                      <p className="text-sm">{selectedComplaint.description || 'No description'}</p>
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-gray-500">Category</label>
+                      <p className="text-sm">{selectedComplaint.category || 'General'}</p>
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-gray-500">Priority</label>
+                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getPriorityColorClass(selectedComplaint.priority)}`}>
+                        {selectedComplaint.priority || 'medium'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold mb-4">User Information</h3>
+                  <div className="space-y-3">
+                    <div>
+                      <label className="text-sm font-medium text-gray-500">Name</label>
+                      <p className="text-sm">{selectedComplaint.user_name || 'Anonymous'}</p>
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-gray-500">Email</label>
+                      <p className="text-sm">{selectedComplaint.email || 'Not provided'}</p>
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-gray-500">Phone</label>
+                      <p className="text-sm">{selectedComplaint.phone || 'Not provided'}</p>
+                    </div>
+                  </div>
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold mb-4">Status & Assignment</h3>
+                  <div className="space-y-3">
+                    <div>
+                      <label className="text-sm font-medium text-gray-500">Status</label>
+                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColorClass(selectedComplaint.status)}`}>
+                        {selectedComplaint.status || 'pending'}
+                      </span>
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-gray-500">Assigned Department</label>
+                      <p className="text-sm">{selectedComplaint.assigned_department || 'Not assigned'}</p>
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-gray-500">Created Date</label>
+                      <p className="text-sm">{new Date(selectedComplaint.created_at).toLocaleDateString()}</p>
+                    </div>
+                  </div>
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold mb-4">Additional Details</h3>
+                  <div className="space-y-3">
+                    <div>
+                      <label className="text-sm font-medium text-gray-500">Location</label>
+                      <p className="text-sm">{selectedComplaint.location || 'Not specified'}</p>
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-gray-500">Attachments</label>
+                      <p className="text-sm">{selectedComplaint.attachments ? 'Available' : 'None'}</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </Layout>
   );
 };

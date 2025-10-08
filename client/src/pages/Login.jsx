@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Eye, EyeOff, Mail, Lock, User, AlertCircle } from 'lucide-react';
-import { authAPI, tokenUtils } from '../utils/api';
+import { Eye, EyeOff, Mail, Lock, User, AlertCircle, Shield } from 'lucide-react';
+import { authAPI, adminAPI, tokenUtils } from '../utils/api';
 
 const Login = () => {
   const navigate = useNavigate();
@@ -13,6 +13,7 @@ const Login = () => {
   const [errors, setErrors] = useState({});
   const [isLoading, setIsLoading] = useState(false);
   const [apiError, setApiError] = useState('');
+  const [isAdminLogin, setIsAdminLogin] = useState(false);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -60,24 +61,50 @@ const Login = () => {
       
       try {
         console.log('Calling login API...');
-        const response = await authAPI.login(formData.email, formData.password);
+        
+        let response;
+        if (isAdminLogin) {
+          response = await adminAPI.adminLogin(formData.email, formData.password);
+        } else {
+          response = await authAPI.login(formData.email, formData.password);
+        }
+        
         console.log('Login response:', response);
         
-        // Store token and redirect
+        // Store token
         tokenUtils.setToken(response.access_token);
         
-        // Get user info and store it
-        console.log('Getting user info...');
-        const userInfo = await authAPI.getCurrentUser();
+        // Handle user data
+        let userInfo;
+        if (isAdminLogin && response.user) {
+          // Admin login returns user data directly
+          userInfo = {
+            ...response.user,
+            is_admin: true,
+            role: 'admin'
+          };
+        } else if (!isAdminLogin) {
+          // Regular login - get user info from profile endpoint
+          console.log('Getting user info...');
+          userInfo = await authAPI.getCurrentUser();
+        } else {
+          // Fallback for admin login without user data
+          userInfo = {
+            email: formData.email,
+            is_admin: true,
+            role: 'admin'
+          };
+        }
+        
         console.log('User info:', userInfo);
         tokenUtils.setUser(userInfo);
         
         // Store user role for easier access
-        localStorage.setItem('userRole', userInfo.role || 'citizen');
+        localStorage.setItem('userRole', userInfo.role || (userInfo.is_admin ? 'admin' : 'citizen'));
         
-        // Redirect based on user role
+        // Redirect based on user type
         console.log('Redirecting user...');
-        if (userInfo.role === 'admin' || userInfo.is_admin) {
+        if (userInfo.is_admin || isAdminLogin) {
           navigate('/admin');
         } else {
           navigate('/dashboard');
@@ -85,7 +112,16 @@ const Login = () => {
       } catch (error) {
         console.error('Login error:', error);
         console.error('Error response:', error.response);
-        if (error.response?.data?.detail) {
+        
+        if (error.response?.status === 401) {
+          setApiError('Invalid email or password');
+        } else if (error.response?.status === 403) {
+          if (isAdminLogin) {
+            setApiError('Admin access required or email not verified');
+          } else {
+            setApiError('Email not verified. Please check your email for verification code.');
+          }
+        } else if (error.response?.data?.detail) {
           setApiError(error.response.data.detail);
         } else if (error.message) {
           setApiError(error.message);
@@ -106,15 +142,51 @@ const Login = () => {
       <div className="max-w-md w-full space-y-8">
         {/* Header */}
         <div className="text-center">
-          <div className="mx-auto h-16 w-16 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-full flex items-center justify-center mb-4">
-            <User className="h-8 w-8 text-white" />
+          <div className={`mx-auto h-16 w-16 bg-gradient-to-r ${isAdminLogin ? 'from-red-600 to-red-700' : 'from-blue-600 to-indigo-600'} rounded-full flex items-center justify-center mb-4`}>
+            {isAdminLogin ? (
+              <Shield className="h-8 w-8 text-white" />
+            ) : (
+              <User className="h-8 w-8 text-white" />
+            )}
           </div>
-          <h2 className="text-3xl font-bold text-gray-900 mb-2">Welcome Back</h2>
-          <p className="text-gray-600">Sign in to your account to continue</p>
+          <h2 className="text-3xl font-bold text-gray-900 mb-2">
+            {isAdminLogin ? 'Admin Portal' : 'Welcome Back'}
+          </h2>
+          <p className="text-gray-600">
+            {isAdminLogin ? 'Sign in to admin dashboard' : 'Sign in to your account to continue'}
+          </p>
         </div>
 
         {/* Login Form */}
         <div className="bg-white shadow-xl rounded-2xl px-8 py-10 border border-gray-100">
+          {/* Admin Login Toggle */}
+          <div className="mb-6 flex items-center justify-center space-x-4">
+            <button
+              type="button"
+              onClick={() => setIsAdminLogin(false)}
+              className={`flex items-center px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
+                !isAdminLogin
+                  ? 'bg-blue-100 text-blue-700 border-2 border-blue-200'
+                  : 'bg-gray-100 text-gray-600 border-2 border-transparent hover:bg-gray-200'
+              }`}
+            >
+              <User className="h-4 w-4 mr-2" />
+              Citizen Login
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsAdminLogin(true)}
+              className={`flex items-center px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
+                isAdminLogin
+                  ? 'bg-red-100 text-red-700 border-2 border-red-200'
+                  : 'bg-gray-100 text-gray-600 border-2 border-transparent hover:bg-gray-200'
+              }`}
+            >
+              <Shield className="h-4 w-4 mr-2" />
+              Admin Login
+            </button>
+          </div>
+
           {/* API Error Display */}
           {apiError && (
             <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center">
@@ -140,6 +212,7 @@ const Login = () => {
                   value={formData.email}
                   onChange={handleChange}
                   disabled={isLoading}
+                  autoComplete="email"
                   className={`block w-full pl-10 pr-3 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 ${
                     errors.email 
                       ? 'border-red-300 bg-red-50' 
@@ -169,6 +242,7 @@ const Login = () => {
                   value={formData.password}
                   onChange={handleChange}
                   disabled={isLoading}
+                  autoComplete="current-password"
                   className={`block w-full pl-10 pr-10 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 ${
                     errors.password 
                       ? 'border-red-300 bg-red-50' 
@@ -204,6 +278,7 @@ const Login = () => {
                   id="remember-me"
                   name="remember-me"
                   type="checkbox"
+                  autoComplete="remember"
                   className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
                   disabled={isLoading}
                 />
