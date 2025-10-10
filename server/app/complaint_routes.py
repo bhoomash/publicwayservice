@@ -31,24 +31,24 @@ class ComplaintUpdate(BaseModel):
 class ComplaintResponse(BaseModel):
     id: str
     user_id: str
-    user_name: str
-    user_email: str
+    user_name: Optional[str] = None
+    user_email: Optional[str] = None
     title: str
     description: str
-    category: str
-    location: str
-    contact_phone: str
-    contact_email: str
-    urgency: str
-    status: str
-    priority_score: int
-    assigned_department: str
-    ai_response: str
-    ai_category: str
-    ai_department: str
-    estimated_resolution: str
-    submitted_date: datetime
-    last_updated: datetime
+    category: Optional[str] = None
+    location: Optional[str] = None
+    contact_phone: Optional[str] = None
+    contact_email: Optional[str] = None
+    urgency: Optional[str] = "medium"
+    status: Optional[str] = "pending"
+    priority_score: Optional[int] = 50
+    assigned_department: Optional[str] = None
+    ai_response: Optional[str] = None
+    ai_category: Optional[str] = None
+    ai_department: Optional[str] = None
+    estimated_resolution: Optional[str] = None
+    submitted_date: Optional[datetime] = None
+    last_updated: Optional[datetime] = None
     attachments: List[str] = []
     vector_db_id: Optional[str] = None
     rag_summary: Optional[str] = None
@@ -63,6 +63,41 @@ class ComplaintResponse(BaseModel):
 # Initialize AI service
 ai_service = AIService()
 rag_pipeline = RAGPipeline()
+
+def transform_complaint_for_response(complaint_doc):
+    """Transform MongoDB complaint document to ComplaintResponse format"""
+    # Handle _id to id transformation
+    if "_id" in complaint_doc:
+        complaint_doc["id"] = complaint_doc.get("id") or str(complaint_doc["_id"])
+        del complaint_doc["_id"]
+    
+    # Ensure required fields have default values
+    defaults = {
+        "user_name": complaint_doc.get("user_name", ""),
+        "user_email": complaint_doc.get("user_email", ""),
+        "category": complaint_doc.get("category", "general"),
+        "location": complaint_doc.get("location", ""),
+        "contact_phone": complaint_doc.get("contact_phone", ""),
+        "contact_email": complaint_doc.get("contact_email", ""),
+        "urgency": complaint_doc.get("urgency", "medium"),
+        "status": complaint_doc.get("status", "pending"),
+        "priority_score": complaint_doc.get("priority_score", 50),
+        "assigned_department": complaint_doc.get("assigned_department", ""),
+        "ai_response": complaint_doc.get("ai_response", ""),
+        "ai_category": complaint_doc.get("ai_category", ""),
+        "ai_department": complaint_doc.get("ai_department", ""),
+        "estimated_resolution": complaint_doc.get("estimated_resolution", ""),
+        "submitted_date": complaint_doc.get("submitted_date") or complaint_doc.get("created_at"),
+        "last_updated": complaint_doc.get("last_updated") or complaint_doc.get("created_at"),
+        "attachments": complaint_doc.get("attachments", [])
+    }
+    
+    # Update complaint_doc with defaults for missing fields
+    for key, default_value in defaults.items():
+        if key not in complaint_doc or complaint_doc[key] is None:
+            complaint_doc[key] = default_value
+    
+    return complaint_doc
 
 @router.post("/new", response_model=dict)
 async def submit_complaint(
@@ -172,12 +207,16 @@ async def submit_complaint(
         result = complaints_collection.insert_one(complaint_doc)
         
         if result.inserted_id:
-            # Create notification
+            # Create notification with complaint details
             await create_notification(
                 user_id=current_user["user_id"],
                 title="Complaint Submitted",
-                message=f"Your complaint {complaint_id} has been submitted and processed by the RAG intelligence pipeline.",
-                type="submitted"
+                message=f"Your complaint '{complaint.title}' has been submitted and processed by the RAG intelligence pipeline.",
+                type="submitted",
+                related_complaint_id=complaint_id,
+                problem_type=rag_result.get("department", "general").lower().replace(" ", "_"),
+                department=rag_result.get("department"),
+                urgency=complaint.urgency
             )
             rag_payload = {
                 "document_id": rag_result["document_id"],
@@ -234,12 +273,58 @@ async def get_my_complaints(
         # Convert to response format
         response_complaints = []
         for complaint in complaints:
-            response_complaints.append(ComplaintResponse(**complaint))
+            transformed_complaint = transform_complaint_for_response(complaint.copy())
+            response_complaints.append(ComplaintResponse(**transformed_complaint))
         
         return response_complaints
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error fetching complaints: {str(e)}")
+
+@router.get("/user/{user_id}", response_model=List[ComplaintResponse])
+async def get_user_complaints_by_id(
+    user_id: str,
+    current_user: UserResponse = Depends(get_current_user),
+    status: Optional[str] = None,
+    category: Optional[str] = None,
+    limit: Optional[int] = None
+):
+    """Get complaints for a specific user"""
+    try:
+        db = get_database()
+        complaints_collection = db.complaints
+        
+        # If requesting another user's complaints, check permissions
+        if user_id != current_user["user_id"]:
+            if current_user.get("role") not in ["admin", "collector"]:
+                raise HTTPException(status_code=403, detail="Access denied - can only view own complaints")
+        
+        # Build query
+        query = {"user_id": user_id}
+        if status:
+            query["status"] = status
+        if category:
+            query["category"] = category
+        
+        # Fetch complaints with optional limit
+        complaints_cursor = complaints_collection.find(query).sort("submitted_date", -1)
+        if limit:
+            complaints_cursor = complaints_cursor.limit(limit)
+        
+        complaints = list(complaints_cursor)
+        
+        # Convert to response format
+        response_complaints = []
+        for complaint in complaints:
+            transformed_complaint = transform_complaint_for_response(complaint.copy())
+            response_complaints.append(ComplaintResponse(**transformed_complaint))
+        
+        return response_complaints
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching user complaints: {str(e)}")
 
 @router.get("/{complaint_id}", response_model=ComplaintResponse)
 async def get_complaint_details(
@@ -261,7 +346,8 @@ async def get_complaint_details(
         if current_user.get("role") != "admin" and complaint["user_id"] != current_user["user_id"]:
             raise HTTPException(status_code=403, detail="Access denied")
         
-        return ComplaintResponse(**complaint)
+        transformed_complaint = transform_complaint_for_response(complaint.copy())
+        return ComplaintResponse(**transformed_complaint)
         
     except HTTPException:
         raise
@@ -326,12 +412,20 @@ async def update_complaint_status(
         )
         
         if result.modified_count > 0:
-            # Create notification for user
+            # Determine notification type based on status
+            notification_type = "resolved" if update.status == "resolved" else "status_update"
+            notification_title = "Complaint Resolved" if update.status == "resolved" else "Complaint Status Updated"
+            
+            # Create notification for user with complaint details
             await create_notification(
                 user_id=complaint["user_id"],
-                title="Complaint Status Updated",
-                message=f"Your complaint {complaint_id} status has been updated: {status_note}",
-                type="status_update"
+                title=notification_title,
+                message=f"Your complaint '{complaint['title']}' status has been updated: {status_note}",
+                type=notification_type,
+                related_complaint_id=complaint_id,
+                problem_type=complaint.get("category", "general").lower().replace(" ", "_"),
+                department=complaint.get("assigned_department"),
+                urgency=complaint.get("urgency")
             )
             
             return {"success": True, "message": "Complaint updated successfully"}
@@ -418,7 +512,8 @@ async def get_all_complaints(
         # Convert to response format
         response_complaints = []
         for complaint in complaints:
-            response_complaints.append(ComplaintResponse(**complaint))
+            transformed_complaint = transform_complaint_for_response(complaint.copy())
+            response_complaints.append(ComplaintResponse(**transformed_complaint))
         
         return response_complaints
         

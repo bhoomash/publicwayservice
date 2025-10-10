@@ -3,7 +3,7 @@ import { Menu, Bell, X, ChevronDown } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import AdminSidebar from './AdminSidebar';
-import ChatBot from './ChatBot';
+import ChatBot from './EnhancedChatBot';
 import Footer from './Footer';
 
 const Layout = ({ children, title = "Dashboard", isAdmin = false }) => {
@@ -194,8 +194,8 @@ const Layout = ({ children, title = "Dashboard", isAdmin = false }) => {
         />
       )}
       
-      {/* ChatBot */}
-      <ChatBot />
+      {/* ChatBot - Only show for non-admin users */}
+      {!isAdmin && <ChatBot />}
     </div>
   );
 };

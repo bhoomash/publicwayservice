@@ -18,6 +18,9 @@ class NotificationResponse(BaseModel):
     is_read: bool
     timestamp: datetime
     related_complaint_id: Optional[str] = None
+    problem_type: Optional[str] = None
+    department: Optional[str] = None
+    urgency: Optional[str] = None
 
 @router.get("/", response_model=List[NotificationResponse])
 async def get_notifications(
@@ -135,8 +138,75 @@ async def get_unread_count(current_user: User = Depends(get_current_user)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error counting notifications: {str(e)}")
 
-async def create_notification(user_id: str, title: str, message: str, type: str, related_complaint_id: str = None):
-    """Helper function to create notifications"""
+@router.post("/test/create-sample")
+async def create_sample_notifications(current_user: User = Depends(get_current_user)):
+    """Create sample notifications for testing (development only)"""
+    try:
+        sample_notifications = [
+            {
+                "title": "Road Repair Request Submitted",
+                "message": "Your road repair complaint for Main Street has been submitted and assigned to the Transport Department.",
+                "type": "submitted",
+                "problem_type": "road",
+                "department": "Transport Department",
+                "urgency": "high",
+                "related_complaint_id": "CMP001"
+            },
+            {
+                "title": "Water Supply Issue Resolved",
+                "message": "Great news! Your water supply complaint has been successfully resolved by the Water Department.",
+                "type": "resolved",
+                "problem_type": "water",
+                "department": "Water Department", 
+                "urgency": "medium",
+                "related_complaint_id": "CMP002"
+            },
+            {
+                "title": "Street Light Status Update",
+                "message": "Your street light complaint is now in progress. Our electrical team is working on it.",
+                "type": "status_update",
+                "problem_type": "street_light",
+                "department": "Electricity Department",
+                "urgency": "low",
+                "related_complaint_id": "CMP003"
+            },
+            {
+                "title": "Garbage Collection Scheduled", 
+                "message": "Your garbage collection complaint has been assigned to the Sanitation Department.",
+                "type": "status_update",
+                "problem_type": "garbage",
+                "department": "Sanitation Department",
+                "urgency": "medium",
+                "related_complaint_id": "CMP004"
+            }
+        ]
+        
+        created_notifications = []
+        for notif in sample_notifications:
+            result = await create_notification(
+                user_id=current_user["user_id"],
+                title=notif["title"],
+                message=notif["message"],
+                type=notif["type"],
+                related_complaint_id=notif["related_complaint_id"],
+                problem_type=notif["problem_type"],
+                department=notif["department"],
+                urgency=notif["urgency"]
+            )
+            if result:
+                created_notifications.append(result)
+        
+        return {
+            "success": True,
+            "message": f"Created {len(created_notifications)} sample notifications",
+            "notifications": created_notifications
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error creating sample notifications: {str(e)}")
+
+async def create_notification(user_id: str, title: str, message: str, type: str, related_complaint_id: str = None, problem_type: str = None, department: str = None, urgency: str = None):
+    """Helper function to create notifications with complaint details"""
     try:
         db = get_database()
         notifications_collection = db.notifications
@@ -149,7 +219,10 @@ async def create_notification(user_id: str, title: str, message: str, type: str,
             "type": type,
             "is_read": False,
             "timestamp": datetime.utcnow(),
-            "related_complaint_id": related_complaint_id
+            "related_complaint_id": related_complaint_id,
+            "problem_type": problem_type,
+            "department": department,
+            "urgency": urgency
         }
         
         notifications_collection.insert_one(notification)

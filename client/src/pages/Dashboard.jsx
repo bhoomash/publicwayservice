@@ -26,7 +26,6 @@ const Dashboard = () => {
     pendingComplaints: 0,
     resolvedComplaints: 0,
     inProgressComplaints: 0,
-    aiProcessed: 0,
     averageResolutionTime: 0
   });
   const [recentComplaints, setRecentComplaints] = useState([]);
@@ -48,7 +47,6 @@ const Dashboard = () => {
         pendingComplaints: data.pendingComplaints || 0,
         resolvedComplaints: data.resolvedComplaints || 0,
         inProgressComplaints: data.inProgressComplaints || 0,
-        aiProcessed: data.aiProcessed || 0,
         averageResolutionTime: data.averageResolutionTime || 0
       });
       setLastUpdated(new Date());
@@ -62,7 +60,6 @@ const Dashboard = () => {
         pendingComplaints: 0,
         resolvedComplaints: 0,
         inProgressComplaints: 0,
-        aiProcessed: 0,
         averageResolutionTime: 0
       });
     } finally {
@@ -72,11 +69,9 @@ const Dashboard = () => {
 
   // Fetch recent complaints
   const fetchRecentComplaints = useCallback(async () => {
-    if (!user?._id) return;
-    
     try {
       setComplaintsLoading(true);
-      const complaints = await complaintsAPI.getUserComplaints(user._id, { limit: 3 });
+      const complaints = await complaintsAPI.getMyComplaints({ limit: 3 });
       setRecentComplaints(complaints || []);
     } catch (error) {
       console.error('Error fetching recent complaints:', error);
@@ -85,7 +80,7 @@ const Dashboard = () => {
     } finally {
       setComplaintsLoading(false);
     }
-  }, [user?._id]);
+  }, []);
 
   useEffect(() => {
     // Check if user is admin and redirect to admin dashboard
@@ -104,24 +99,20 @@ const Dashboard = () => {
     fetchUserStats();
   }, [navigate, fetchUserStats]);
 
-  // Fetch recent complaints when user is set
+  // Fetch recent complaints when component mounts
   useEffect(() => {
-    if (user?._id) {
-      fetchRecentComplaints();
-    }
-  }, [user, fetchRecentComplaints]);
+    fetchRecentComplaints();
+  }, [fetchRecentComplaints]);
 
   // Auto-refresh every 60 seconds
   useEffect(() => {
     const interval = setInterval(() => {
       fetchUserStats(false); // Don't show loading spinner for auto-refresh
-      if (user?._id) {
-        fetchRecentComplaints();
-      }
+      fetchRecentComplaints();
     }, 60000); // 60 seconds
 
     return () => clearInterval(interval);
-  }, [fetchUserStats, fetchRecentComplaints, user?._id]);
+  }, [fetchUserStats, fetchRecentComplaints]);
 
   // Loading skeleton component
   const StatCardSkeleton = () => (
@@ -250,59 +241,7 @@ const Dashboard = () => {
         </div>
 
         {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
-          {loading ? (
-            // Show skeleton loading for stats
-            Array.from({ length: 6 }).map((_, index) => (
-              <StatCardSkeleton key={index} />
-            ))
-          ) : (
-            <>
-              <StatCard
-                icon={FileText}
-                title="Total Complaints"
-                value={stats.totalComplaints}
-                color="text-blue-600"
-                description="All time complaints"
-              />
-              <StatCard
-                icon={AlertCircle}
-                title="Pending"
-                value={stats.pendingComplaints}
-                color="text-orange-600"
-                description="Awaiting review"
-              />
-              <StatCard
-                icon={TrendingUp}
-                title="In Progress"
-                value={stats.inProgressComplaints}
-                color="text-blue-600"
-                description="Being processed"
-              />
-              <StatCard
-                icon={CheckCircle}
-                title="Resolved"
-                value={stats.resolvedComplaints}
-                color="text-green-600"
-                description="Successfully closed"
-              />
-              <StatCard
-                icon={Brain}
-                title="AI Processed"
-                value={stats.aiProcessed}
-                color="text-purple-600"
-                description="Auto-categorized"
-              />
-              <StatCard
-                icon={Clock}
-                title="Avg Resolution"
-                value={`${stats.averageResolutionTime}d`}
-                color="text-teal-600"
-                description="Days to resolve"
-              />
-            </>
-          )}
-        </div>
+        
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Recent Complaints */}
@@ -456,55 +395,6 @@ const Dashboard = () => {
                   </div>
                 </button>
               </div>
-            </div>
-          </div>
-        </div>
-
-        {/* AI Summary Section */}
-        <div className="bg-gradient-to-r from-purple-50 to-indigo-50 rounded-lg p-6 border border-purple-200">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center space-x-3">
-              <div className="p-2 bg-purple-100 rounded-lg">
-                <Brain size={24} className="text-purple-600" />
-              </div>
-              <div>
-                <h3 className="text-lg font-semibold text-gray-800">AI Summary</h3>
-                <p className="text-sm text-gray-600">Automated insights and recommendations</p>
-              </div>
-            </div>
-            <div className="flex items-center space-x-2 text-sm text-purple-600">
-              <Zap size={16} />
-              <span>Auto-updated</span>
-            </div>
-          </div>
-          
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="bg-white rounded-lg p-4 border border-purple-100">
-              <h4 className="font-medium text-gray-800 mb-2">Priority Alerts</h4>
-              <p className="text-sm text-gray-600">
-                {stats.pendingComplaints > 0 
-                  ? `${stats.pendingComplaints} complaint${stats.pendingComplaints > 1 ? 's' : ''} awaiting review`
-                  : 'No pending complaints'
-                }
-              </p>
-            </div>
-            <div className="bg-white rounded-lg p-4 border border-purple-100">
-              <h4 className="font-medium text-gray-800 mb-2">AI Processing</h4>
-              <p className="text-sm text-gray-600">
-                {stats.aiProcessed > 0
-                  ? `${stats.aiProcessed} complaint${stats.aiProcessed > 1 ? 's' : ''} processed by AI`
-                  : 'No AI-processed complaints yet'
-                }
-              </p>
-            </div>
-            <div className="bg-white rounded-lg p-4 border border-purple-100">
-              <h4 className="font-medium text-gray-800 mb-2">Resolution Time</h4>
-              <p className="text-sm text-gray-600">
-                {stats.averageResolutionTime > 0
-                  ? `Average ${stats.averageResolutionTime} day${stats.averageResolutionTime > 1 ? 's' : ''} to resolve`
-                  : 'No resolution data available'
-                }
-              </p>
             </div>
           </div>
         </div>

@@ -2,7 +2,7 @@ import axios from 'axios';
 
 // Create axios instance with base configuration
 const api = axios.create({
-  baseURL: 'http://localhost:8000',
+  baseURL: 'http://localhost:8001',
   headers: {
     'Content-Type': 'application/json',
   },
@@ -172,7 +172,7 @@ export const complaintsAPI = {
     if (filters.category) params.append('category', filters.category);
     if (filters.limit) params.append('limit', filters.limit);
     
-    const response = await api.get(`/complaints?userId=${userId}&${params}`);
+    const response = await api.get(`/complaints/user/${userId}?${params}`);
     return response.data;
   },
 
@@ -278,6 +278,12 @@ export const chatAPI = {
   // Send message to AI
   sendMessage: async (message) => {
     const response = await api.post('/chat/message', { message });
+    return response.data;
+  },
+
+  // Submit guided complaint through chat
+  submitGuidedComplaint: async (complaintData) => {
+    const response = await api.post('/chat/submit-guided-complaint', { complaint_data: complaintData });
     return response.data;
   },
 

@@ -19,6 +19,9 @@ import {
 } from 'lucide-react';
 
 const SubmitComplaint = () => {
+  // Submission Mode State
+  const [submissionMode, setSubmissionMode] = useState('text'); // 'text' or 'document'
+  
   const [formData, setFormData] = useState({
     title: '',
     category: '',
@@ -38,6 +41,12 @@ const SubmitComplaint = () => {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [aiInsights, setAiInsights] = useState(null);
+  
+  // Document Upload State
+  const [uploadedDocument, setUploadedDocument] = useState(null);
+  const [extractedData, setExtractedData] = useState(null);
+  const [isExtracting, setIsExtracting] = useState(false);
+  const [showConfirmation, setShowConfirmation] = useState(false);
 
   const categories = [
     'Infrastructure',
@@ -128,19 +137,116 @@ const SubmitComplaint = () => {
     }));
   };
 
-  const handleFileUpload = (e) => {
-    const files = Array.from(e.target.files);
-    setFormData(prev => ({
-      ...prev,
-      attachments: [...prev.attachments, ...files]
-    }));
+  // Document Upload Handler
+  const handleDocumentUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    setUploadedDocument(file);
+    setIsExtracting(true);
+    setExtractedData(null);
+
+    try {
+      // Upload document to RAG pipeline for extraction
+      const response = await ragAPI.uploadDocument(file, (progressEvent) => {
+        const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+        console.log(`Document extraction progress: ${percentCompleted}%`);
+      });
+
+      console.log('✅ Document extraction successful:', response);
+
+      // Set extracted data for confirmation
+      setExtractedData({
+        title: response.summary?.substring(0, 100) || 'Extracted from document',
+        category: response.department || 'General',
+        description: response.summary || '',
+        location: response.location || '',
+        urgency: response.urgency?.toLowerCase() || 'medium',
+        vectorDbId: response.vector_db_id,
+        complaintId: response.complaint_id,
+        color: response.color,
+        emoji: response.emoji
+      });
+      
+      setShowConfirmation(true);
+    } catch (error) {
+      console.error('❌ Document extraction failed:', error);
+      setSubmitStatus({
+        type: 'error',
+        message: error.message || 'Failed to process document. Please try again.',
+        detail: error.detail || null
+      });
+    } finally {
+      setIsExtracting(false);
+    }
   };
 
-  const removeAttachment = (index) => {
-    setFormData(prev => ({
-      ...prev,
-      attachments: prev.attachments.filter((_, i) => i !== index)
-    }));
+  // Confirm and submit extracted data
+  const handleConfirmDocumentSubmission = async () => {
+    if (!extractedData) return;
+
+    setIsSubmitting(true);
+    setSubmitStatus(null);
+
+    try {
+      // The document is already processed, just confirm the submission
+      setSubmitStatus({
+        type: 'success',
+        complaintId: extractedData.complaintId,
+        aiSummary: {
+          category: extractedData.category,
+          assigned_department: extractedData.category,
+          estimated_resolution: extractedData.urgency === 'high' ? '24-48 hours' : '3-5 business days',
+          urgency: extractedData.urgency
+        },
+        vectorDbId: extractedData.vectorDbId,
+        ragAnalysis: {
+          document_id: extractedData.vectorDbId,
+          summary: extractedData.description,
+          urgency: extractedData.urgency,
+          department: extractedData.category,
+          location: extractedData.location,
+          color: extractedData.color,
+          emoji: extractedData.emoji
+        },
+        formData: {
+          title: extractedData.title,
+          category: extractedData.category,
+          description: extractedData.description,
+          location: extractedData.location,
+          urgency: extractedData.urgency,
+          attachments: [uploadedDocument]
+        }
+      });
+
+      // Dispatch events
+      window.dispatchEvent(new CustomEvent('complaint:submitted', {
+        detail: {
+          complaintId: extractedData.complaintId,
+          vectorDbId: extractedData.vectorDbId
+        }
+      }));
+
+      window.dispatchEvent(new CustomEvent('admin:dashboard-refresh', {
+        detail: {
+          complaintId: extractedData.complaintId
+        }
+      }));
+
+      // Reset document upload state
+      setUploadedDocument(null);
+      setExtractedData(null);
+      setShowConfirmation(false);
+    } catch (error) {
+      console.error('💥 Submission error:', error);
+      setSubmitStatus({
+        type: 'error',
+        message: error.message || 'Failed to submit complaint. Please try again.',
+        detail: error.detail || null
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleSubmit = async (e) => {
@@ -153,96 +259,40 @@ const SubmitComplaint = () => {
       
       console.log('Submitting complaint with data:', formData);
       
-      // STEP 1 & 2: Check if there are file attachments
-      if (formData.attachments && formData.attachments.length > 0) {
-        // PATH B: File Upload - Use RAG Upload Endpoint
-        console.log('📁 File upload detected - Using RAG pipeline');
+      // TEXT COMPLAINT - Use Standard Complaint Endpoint with AI Processing
+      console.log('📝 Text complaint - Using standard endpoint with AI');
+      
+      try {
+        const textComplaintData = {
+          title: formData.title,
+          description: formData.description,
+          category: formData.category,
+          location: formData.location,
+          contact_phone: formData.contactPhone,
+          contact_email: formData.contactEmail,
+          urgency: formData.urgency
+        };
         
-        // Upload the first file (for now, handle one file)
-        const file = formData.attachments[0];
+        const response = await complaintsAPI.submitComplaint(textComplaintData);
         
-        try {
-          const uploadResponse = await ragAPI.uploadDocument(file, (progressEvent) => {
-            const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
-            console.log(`Upload progress: ${percentCompleted}%`);
-          });
-          
-          console.log('✅ RAG Upload successful:', uploadResponse);
-          
-          complaintResponse = {
-            success: true,
-            complaint_id: uploadResponse.complaint_id,
-            vector_db_id: uploadResponse.vector_db_id,
-            rag_analysis: {
-              document_id: uploadResponse.vector_db_id,
-              summary: uploadResponse.summary,
-              urgency: uploadResponse.urgency,
-              department: uploadResponse.department,
-              location: uploadResponse.location,
-              color: uploadResponse.color,
-              emoji: uploadResponse.emoji,
-              text_length: uploadResponse.text_length || null
-            },
-            ai_summary: {
-              category: uploadResponse.department,
-              priority_score: 85, // RAG doesn't return score yet
-              assigned_department: uploadResponse.department,
-              suggested_response: uploadResponse.summary,
-              estimated_resolution: '2-3 business days',
-              urgency: uploadResponse.urgency,
-              location: uploadResponse.location
-            }
-          };
-          
-        } catch (uploadError) {
-          console.error('❌ RAG upload failed:', uploadError);
-          const detail = uploadError.response?.data?.detail;
-          const message = typeof detail === 'string'
-            ? detail
-            : detail?.message || detail?.reason || 'Failed to process uploaded file. Please try again.';
-          const err = new Error(message);
-          if (detail && typeof detail === 'object') {
-            err.detail = detail;
-          }
-          throw err;
+        console.log('✅ Text complaint submitted successfully:', response);
+        
+        complaintResponse = {
+          ...response,
+          vector_db_id: response.vector_db_id || response.rag_analysis?.document_id
+        };
+        
+      } catch (submitError) {
+        console.error('❌ Complaint submission failed:', submitError);
+        const detail = submitError.response?.data?.detail;
+        const message = typeof detail === 'string'
+          ? detail
+          : detail?.message || detail?.reason || 'Failed to submit complaint. Please try again.';
+        const err = new Error(message);
+        if (detail && typeof detail === 'object') {
+          err.detail = detail;
         }
-        
-      } else {
-        // PATH A: Text Complaint - Use Standard Complaint Endpoint with AI Processing
-        console.log('📝 Text complaint - Using standard endpoint with AI');
-        
-        try {
-          const textComplaintData = {
-            title: formData.title,
-            description: formData.description,
-            category: formData.category,
-            location: formData.location,
-            contact_phone: formData.contactPhone,
-            contact_email: formData.contactEmail,
-            urgency: formData.urgency
-          };
-          
-          const response = await complaintsAPI.submitComplaint(textComplaintData);
-          
-          console.log('✅ Text complaint submitted successfully:', response);
-          
-          complaintResponse = {
-            ...response,
-            vector_db_id: response.vector_db_id || response.rag_analysis?.document_id
-          };
-          
-        } catch (submitError) {
-          console.error('❌ Complaint submission failed:', submitError);
-          const detail = submitError.response?.data?.detail;
-          const message = typeof detail === 'string'
-            ? detail
-            : detail?.message || detail?.reason || 'Failed to submit complaint. Please try again.';
-          const err = new Error(message);
-          if (detail && typeof detail === 'object') {
-            err.detail = detail;
-          }
-          throw err;
-        }
+        throw err;
       }
       
       // Success! Update UI
@@ -286,6 +336,9 @@ const SubmitComplaint = () => {
       setSimilarComplaints([]);
       setShowSuggestions(false);
       setAiInsights(null);
+      setUploadedDocument(null);
+      setExtractedData(null);
+      setShowConfirmation(false);
       
     } catch (error) {
       console.error('💥 Submission error:', error);
@@ -480,8 +533,9 @@ const SubmitComplaint = () => {
       <div className="max-w-6xl mx-auto">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Main Form - Left/Center Column */}
-          <div className="lg:col-span-2">
+          <div className="lg:col-span-3">
             <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+              {/* Header */}
               <div className="p-6 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-purple-50">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center">
@@ -495,12 +549,56 @@ const SubmitComplaint = () => {
                   </div>
                   <div className="flex items-center space-x-2">
                     <Brain className="text-purple-600" size={20} />
-                    {isAnalyzing && <Loader2 className="animate-spin text-blue-600" size={20} />}
+                    {(isAnalyzing || isExtracting) && <Loader2 className="animate-spin text-blue-600" size={20} />}
                   </div>
                 </div>
               </div>
 
-              <form onSubmit={handleSubmit} className="p-6 space-y-6">
+              {/* Submission Mode Switcher */}
+              <div className="p-6 border-b border-gray-200 bg-gray-50">
+                <div className="flex space-x-1 bg-gray-200 rounded-lg p-1 max-w-md mx-auto">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSubmissionMode('text');
+                      setUploadedDocument(null);
+                      setExtractedData(null);
+                      setShowConfirmation(false);
+                    }}
+                    className={`flex-1 px-6 py-3 rounded-md text-sm font-medium transition-all flex items-center justify-center space-x-2 ${
+                      submissionMode === 'text'
+                        ? 'bg-white text-blue-600 shadow-sm'
+                        : 'text-gray-600 hover:text-gray-800'
+                    }`}
+                  >
+                    <FileText size={18} />
+                    <span>Text Complaint</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSubmissionMode('document');
+                      // Clear text form state when switching
+                      setRagAnalysis(null);
+                      setSimilarComplaints([]);
+                      setAiInsights(null);
+                    }}
+                    className={`flex-1 px-6 py-3 rounded-md text-sm font-medium transition-all flex items-center justify-center space-x-2 ${
+                      submissionMode === 'document'
+                        ? 'bg-white text-blue-600 shadow-sm'
+                        : 'text-gray-600 hover:text-gray-800'
+                    }`}
+                  >
+                    <Upload size={18} />
+                    <span>Document Upload</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Conditional Rendering Based on Mode */}
+              {submissionMode === 'text' ? (
+                // TEXT COMPLAINT FORM
+                <form onSubmit={handleSubmit} className="p-6 space-y-6">
                 {/* Title with AI indicator */}
                 <div>
                   <label className="flex items-center text-sm font-medium text-gray-700 mb-2">
@@ -658,78 +756,6 @@ const SubmitComplaint = () => {
                   placeholder="Your email address"
                 />
               </div>
-            </div>
-
-            {/* File Attachments */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                <Upload size={16} className="inline mr-1" />
-                Attachments (Optional)
-              </label>
-              
-              {/* Processing Path Indicator */}
-              <div className="mb-3 p-3 bg-gradient-to-r from-blue-50 to-purple-50 border border-blue-200 rounded-lg">
-                <div className="flex items-center justify-between text-xs">
-                  <div className="flex items-center space-x-2">
-                    <FileText size={14} className="text-blue-600" />
-                    <span className="text-gray-700">
-                      <strong>Text Only:</strong> AI Analysis
-                    </span>
-                  </div>
-                  <div className="text-gray-400">→</div>
-                  <div className="flex items-center space-x-2">
-                    <Upload size={14} className="text-purple-600" />
-                    <span className="text-gray-700">
-                      <strong>With File:</strong> RAG Pipeline
-                    </span>
-                  </div>
-                </div>
-              </div>
-              
-              <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-purple-400 transition-colors">
-                <Upload size={24} className="text-gray-400 mx-auto mb-2" />
-                <p className="text-sm text-gray-600 mb-2">
-                  Click to upload or drag and drop
-                </p>
-                <p className="text-xs text-gray-500 mb-1">
-                  PDF, DOCX, PNG, JPG up to 10MB
-                </p>
-                <p className="text-xs text-purple-600 font-medium">
-                  📄 Files will be processed through RAG pipeline with AI extraction
-                </p>
-                <input
-                  type="file"
-                  multiple
-                  onChange={handleFileUpload}
-                  accept=".png,.jpg,.jpeg,.pdf"
-                  className="hidden"
-                  id="file-upload"
-                />
-                <label
-                  htmlFor="file-upload"
-                  className="inline-block mt-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg cursor-pointer hover:bg-gray-200 transition-colors"
-                >
-                  Select Files
-                </label>
-              </div>
-
-              {/* Uploaded Files */}
-              {formData.attachments.length > 0 && (
-                <div className="mt-4 space-y-2">
-                  {formData.attachments.map((file, index) => (
-                    <div key={index} className="flex items-center justify-between p-2 bg-gray-50 rounded">
-                      <span className="text-sm text-gray-700">{file.name}</span>
-                      <button
-                        type="button"
-                        onClick={() => removeAttachment(index)}
-                        className="text-red-500 hover:text-red-700"
-                      >
-                        Remove
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
             </div>
 
             {/* RAG AI Suggestions */}
@@ -891,86 +917,205 @@ const SubmitComplaint = () => {
               </button>
             </div>
           </form>
-        </div>
-      </div>
+              ) : (
+                // DOCUMENT UPLOAD INTERFACE
+                <div className="p-6 space-y-6">
+                  {/* Upload Section */}
+                  {!extractedData && (
+                    <div className="space-y-4">
+                      <div className="bg-gradient-to-r from-cyan-50 to-blue-50 border border-cyan-200 rounded-lg p-6">
+                        <h3 className="text-lg font-semibold text-gray-800 mb-3 flex items-center">
+                          <Upload size={20} className="mr-2 text-blue-600" />
+                          Upload Document for AI Processing
+                        </h3>
+                        <p className="text-sm text-gray-600 mb-4">
+                          Upload a document (PDF, DOCX, image) containing your complaint details. 
+                          Our AI will automatically extract title, category, description, location, and urgency.
+                        </p>
+                        
+                        <div className="border-2 border-dashed border-blue-300 rounded-lg p-8 text-center hover:border-blue-500 transition-colors bg-white">
+                          {isExtracting ? (
+                            <div className="space-y-4">
+                              <Loader2 size={48} className="text-blue-600 mx-auto animate-spin" />
+                              <p className="text-lg font-semibold text-gray-800">Analyzing Document...</p>
+                              <p className="text-sm text-gray-600">
+                                AI is extracting complaint information from your document
+                              </p>
+                              <div className="flex items-center justify-center space-x-2">
+                                <Brain className="text-purple-600 animate-pulse" size={20} />
+                                <Sparkles className="text-blue-600 animate-pulse" size={20} />
+                              </div>
+                            </div>
+                          ) : (
+                            <>
+                              <Upload size={48} className="text-gray-400 mx-auto mb-4" />
+                              <p className="text-lg font-medium text-gray-700 mb-2">
+                                Drop your file here or click to browse
+                              </p>
+                              <p className="text-sm text-gray-500 mb-4">
+                                Supported formats: PDF, DOCX, PNG, JPG (max 10MB)
+                              </p>
+                              <input
+                                type="file"
+                                onChange={handleDocumentUpload}
+                                accept=".pdf,.docx,.png,.jpg,.jpeg"
+                                className="hidden"
+                                id="document-upload"
+                                disabled={isExtracting}
+                              />
+                              <label
+                                htmlFor="document-upload"
+                                className="inline-block px-6 py-3 bg-blue-600 text-white rounded-lg cursor-pointer hover:bg-blue-700 transition-colors font-semibold"
+                              >
+                                Select Document
+                              </label>
+                            </>
+                          )}
+                        </div>
+                        
+                        {uploadedDocument && !extractedData && !isExtracting && (
+                          <div className="mt-4 p-4 bg-white border border-gray-200 rounded-lg flex items-center justify-between">
+                            <div className="flex items-center">
+                              <FileText size={20} className="text-blue-600 mr-3" />
+                              <span className="text-sm font-medium text-gray-700">{uploadedDocument.name}</span>
+                            </div>
+                            <button
+                              onClick={() => {
+                                setUploadedDocument(null);
+                                setExtractedData(null);
+                              }}
+                              className="text-red-500 hover:text-red-700 text-sm font-medium"
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
 
-      {/* AI Insights Sidebar - Right Column */}
-      <div className="lg:col-span-1">
-        <div className="bg-gradient-to-br from-purple-50 to-blue-50 rounded-lg shadow-sm border-2 border-purple-200 p-6 sticky top-6">
-          <div className="flex items-center mb-4">
-            <div className="w-10 h-10 bg-purple-600 rounded-lg flex items-center justify-center mr-3">
-              <Brain size={20} className="text-white" />
-            </div>
-            <div>
-              <h3 className="font-semibold text-gray-800">AI Assistant</h3>
-              <p className="text-xs text-gray-600">Real-time Analysis</p>
-            </div>
-          </div>
+                  {/* Extracted Data Confirmation */}
+                  {extractedData && showConfirmation && (
+                    <div className="space-y-4">
+                      <div className="bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-lg p-6">
+                        <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
+                          <CheckCircle size={20} className="mr-2 text-green-600" />
+                          AI Extraction Complete - Please Review
+                        </h3>
+                        
+                        <div className="space-y-4">
+                          {/* Extracted Title */}
+                          <div className="bg-white rounded-lg p-4 border border-gray-200">
+                            <label className="text-sm font-medium text-gray-600 mb-2 block">Title</label>
+                            <p className="text-gray-800 font-medium">{extractedData.title}</p>
+                          </div>
 
-          {/* AI Status */}
-          <div className="space-y-4">
-            {isAnalyzing && (
-              <div className="bg-white rounded-lg p-4 border border-purple-200">
-                <div className="flex items-center">
-                  <Loader2 className="animate-spin text-purple-600 mr-2" size={16} />
-                  <span className="text-sm text-gray-700">Analyzing your complaint...</span>
+                          {/* Extracted Category & Urgency */}
+                          <div className="grid grid-cols-2 gap-4">
+                            <div className="bg-white rounded-lg p-4 border border-gray-200">
+                              <label className="text-sm font-medium text-gray-600 mb-2 block">Category</label>
+                              <p className="text-gray-800 font-medium flex items-center">
+                                {extractedData.emoji && <span className="mr-2">{extractedData.emoji}</span>}
+                                {extractedData.category}
+                              </p>
+                            </div>
+                            <div className="bg-white rounded-lg p-4 border border-gray-200">
+                              <label className="text-sm font-medium text-gray-600 mb-2 block">Urgency</label>
+                              <p className={`font-medium ${
+                                extractedData.urgency === 'high' ? 'text-red-600' :
+                                extractedData.urgency === 'medium' ? 'text-orange-600' :
+                                'text-green-600'
+                              }`}>
+                                {extractedData.urgency.charAt(0).toUpperCase() + extractedData.urgency.slice(1)}
+                              </p>
+                            </div>
+                          </div>
+
+                          {/* Extracted Description */}
+                          <div className="bg-white rounded-lg p-4 border border-gray-200">
+                            <label className="text-sm font-medium text-gray-600 mb-2 block">Description</label>
+                            <p className="text-gray-700 text-sm leading-relaxed">{extractedData.description}</p>
+                          </div>
+
+                          {/* Extracted Location */}
+                          {extractedData.location && (
+                            <div className="bg-white rounded-lg p-4 border border-gray-200">
+                              <label className="text-sm font-medium text-gray-600 mb-2 flex items-center">
+                                <MapPin size={16} className="mr-1" />
+                                Location
+                              </label>
+                              <p className="text-gray-800">{extractedData.location}</p>
+                            </div>
+                          )}
+
+                          {/* Vector DB Info */}
+                          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                            <div className="flex items-start">
+                              <Brain size={20} className="text-blue-600 mr-3 mt-0.5" />
+                              <div className="flex-1">
+                                <p className="text-sm font-medium text-gray-800 mb-1">AI Processing Complete</p>
+                                <p className="text-xs text-gray-600">
+                                  Vector DB ID: <span className="font-mono">{extractedData.vectorDbId.substring(0, 12)}...</span>
+                                </p>
+                                <p className="text-xs text-gray-600 mt-1">
+                                  Complaint ID: <span className="font-mono font-semibold">{extractedData.complaintId}</span>
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Action Buttons */}
+                        <div className="flex justify-end space-x-4 mt-6">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setExtractedData(null);
+                              setUploadedDocument(null);
+                              setShowConfirmation(false);
+                            }}
+                            className="px-6 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors font-medium"
+                          >
+                            Cancel & Upload New
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleConfirmDocumentSubmission}
+                            disabled={isSubmitting}
+                            className="px-8 py-3 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-lg hover:from-green-700 hover:to-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg flex items-center font-semibold"
+                          >
+                            {isSubmitting ? (
+                              <>
+                                <Loader2 className="animate-spin mr-2" size={18} />
+                                Confirming...
+                              </>
+                            ) : (
+                              <>
+                                <CheckCircle size={18} className="mr-2" />
+                                Confirm & Submit
+                              </>
+                            )}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Error Message for Document Upload */}
+                  {submitStatus?.type === 'error' && submissionMode === 'document' && (
+                    <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
+                      <div className="flex items-start">
+                        <AlertCircle size={20} className="text-red-600 mr-3 mt-0.5" />
+                        <div>
+                          <p className="text-red-700 font-medium">
+                            {submitStatus.message || 'Failed to process document. Please try again.'}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
-              </div>
-            )}
-
-            {aiInsights && (
-              <div className="bg-white rounded-lg p-4 border border-purple-200">
-                <div className="flex items-start">
-                  <Lightbulb className={`${aiInsights.error ? 'text-yellow-500' : 'text-purple-600'} mr-2 mt-0.5`} size={18} />
-                  <div className="flex-1">
-                    <p className="text-sm font-medium text-gray-800 mb-2">{aiInsights.message}</p>
-                    {aiInsights.suggestion && (
-                      <p className="text-xs text-gray-600">{aiInsights.suggestion}</p>
-                    )}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Feature List */}
-            <div className="bg-white rounded-lg p-4 border border-blue-200">
-              <h4 className="text-sm font-semibold text-gray-800 mb-3 flex items-center">
-                <Info size={16} className="text-blue-600 mr-1" />
-                AI Features
-              </h4>
-              <ul className="space-y-2 text-xs text-gray-600">
-                <li className="flex items-start">
-                  <span className="text-blue-600 mr-2">✓</span>
-                  <span>Automatic categorization</span>
-                </li>
-                <li className="flex items-start">
-                  <span className="text-blue-600 mr-2">✓</span>
-                  <span>Similar complaint detection</span>
-                </li>
-                <li className="flex items-start">
-                  <span className="text-blue-600 mr-2">✓</span>
-                  <span>Department routing</span>
-                </li>
-                <li className="flex items-start">
-                  <span className="text-blue-600 mr-2">✓</span>
-                  <span>Priority assessment</span>
-                </li>
-                <li className="flex items-start">
-                  <span className="text-blue-600 mr-2">✓</span>
-                  <span>Vector database storage</span>
-                </li>
-              </ul>
-            </div>
-
-            {/* Stats */}
-            {similarComplaints.length > 0 && (
-              <div className="bg-white rounded-lg p-4 border border-green-200">
-                <h4 className="text-sm font-semibold text-gray-800 mb-2">Match Found</h4>
-                <div className="text-2xl font-bold text-green-600">{similarComplaints.length}</div>
-                <p className="text-xs text-gray-600">Similar complaint{similarComplaints.length !== 1 ? 's' : ''}</p>
-              </div>
-            )}
-          </div>
+              )}
         </div>
       </div>
     </div>
