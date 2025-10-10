@@ -2,7 +2,7 @@ import axios from 'axios';
 
 // Create axios instance with base configuration
 const api = axios.create({
-  baseURL: 'http://localhost:8001',
+  baseURL: 'http://localhost:8000',
   headers: {
     'Content-Type': 'application/json',
   },
@@ -220,7 +220,7 @@ export const complaintsAPI = {
   // Get user dashboard statistics
   getUserDashboardStats: async () => {
     try {
-      const response = await api.get('/api/dashboard/user-stats');
+      const response = await api.get('/complaints/user-dashboard-stats');
       return response.data;
     } catch (error) {
       throw new Error(`Failed to fetch user dashboard stats: ${error.response?.data?.message || error.message}`);

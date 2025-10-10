@@ -541,3 +541,52 @@ async def create_notification(user_id: str, title: str, message: str, type: str)
         notifications_collection.insert_one(notification)
     except Exception as e:
         print(f"Error creating notification: {e}")
+
+@router.get("/user-dashboard-stats")
+async def get_user_dashboard_stats(current_user: dict = Depends(get_current_user)):
+    """Get dashboard statistics for the logged-in user"""
+    try:
+        db = get_database()
+        complaints_collection = db.complaints
+        user_id = current_user["user_id"]
+        
+        # Total complaints by user
+        total_complaints = complaints_collection.count_documents({"user_id": user_id})
+        
+        # Status counts
+        status_regex = lambda value: {"$regex": f"^{value}$", "$options": "i"}
+        pending = complaints_collection.count_documents({"user_id": user_id, "status": status_regex("pending")})
+        in_progress = complaints_collection.count_documents({"user_id": user_id, "status": status_regex("in_progress")})
+        resolved = complaints_collection.count_documents({"user_id": user_id, "status": status_regex("resolved")})
+        rejected = complaints_collection.count_documents({"user_id": user_id, "status": status_regex("rejected")})
+        
+        # Recent complaints (last 5)
+        recent_complaints = list(complaints_collection.find(
+            {"user_id": user_id}
+        ).sort("submitted_date", -1).limit(5))
+        
+        # Transform for response
+        recent = []
+        for complaint in recent_complaints:
+            recent.append({
+                "id": str(complaint.get("_id")),
+                "title": complaint.get("title", ""),
+                "status": complaint.get("status", "pending"),
+                "category": complaint.get("category", "general"),
+                "submitted_date": complaint.get("submitted_date"),
+                "urgency": complaint.get("urgency", "medium")
+            })
+        
+        return {
+            "total_complaints": total_complaints,
+            "pending": pending,
+            "in_progress": in_progress,
+            "resolved": resolved,
+            "rejected": rejected,
+            "recent_complaints": recent
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error fetching user dashboard stats: {str(e)}"
+        )
