@@ -12,6 +12,7 @@ from .auth_utils import (
     hash_password, verify_password, create_access_token, verify_token,
     generate_otp, send_otp_email, get_otp_expiry
 )
+from .utils.identity import normalize_user_document
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
@@ -25,7 +26,7 @@ def get_current_user(token: str = Depends(oauth2_scheme)):
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="User not found"
         )
-    return user
+    return normalize_user_document(user)
 
 def get_current_verified_user(current_user: dict = Depends(get_current_user)):
     """Get current verified user"""
@@ -232,7 +233,7 @@ async def login_json(user_data: UserLogin):
 async def get_current_user_info(current_user: dict = Depends(get_current_verified_user)):
     """Get current user information"""
     return UserResponse(
-        id=str(current_user["_id"]),
+        id=current_user["id"],
         first_name=current_user["first_name"],
         last_name=current_user["last_name"],
         email=current_user["email"],
@@ -312,7 +313,7 @@ async def reset_password(reset_data: PasswordReset):
 async def get_profile(current_user: dict = Depends(get_current_verified_user)):
     """Get current user profile"""
     user_data = {
-        "id": str(current_user["_id"]),
+        "id": current_user["id"],
         "first_name": current_user.get("first_name", ""),
         "last_name": current_user.get("last_name", ""),
         "email": current_user["email"],
@@ -346,7 +347,7 @@ async def update_profile(profile_data: ProfileUpdate, current_user: dict = Depen
     
     # Update user in database
     result = users_collection.update_one(
-        {"_id": current_user["_id"]},
+        {"_id": current_user["mongo_id"]},
         {"$set": update_data}
     )
     
@@ -371,7 +372,7 @@ async def change_password(password_data: PasswordChange, current_user: dict = De
     
     # Update password
     result = users_collection.update_one(
-        {"_id": current_user["_id"]},
+    {"_id": current_user["mongo_id"]},
         {
             "$set": {
                 "password": hash_password(password_data.new_password),
@@ -418,7 +419,7 @@ async def update_notification_settings(notifications: NotificationSettings, curr
     }
     
     result = users_collection.update_one(
-        {"_id": current_user["_id"]},
+    {"_id": current_user["mongo_id"]},
         {"$set": update_data}
     )
     
@@ -444,7 +445,7 @@ async def update_privacy_settings(privacy_data: PrivacySettings, current_user: d
             update_data[field] = value
     
     result = users_collection.update_one(
-        {"_id": current_user["_id"]},
+    {"_id": current_user["mongo_id"]},
         {"$set": update_data}
     )
     
@@ -460,7 +461,7 @@ async def update_privacy_settings(privacy_data: PrivacySettings, current_user: d
 async def delete_account(current_user: dict = Depends(get_current_verified_user)):
     """Delete user account"""
     # Delete user from database
-    result = users_collection.delete_one({"_id": current_user["_id"]})
+    result = users_collection.delete_one({"_id": current_user["mongo_id"]})
     
     if result.deleted_count == 0:
         raise HTTPException(

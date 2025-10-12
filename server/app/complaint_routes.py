@@ -1,143 +1,200 @@
-from fastapi import APIRouter, HTTPException, Depends, UploadFile, File
-from typing import List, Optional
-from pydantic import BaseModel
-from datetime import datetime
-import json
-from .models import UserResponse
+from __future__ import annotations
+
+import uuid
+from datetime import datetime, date
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from pydantic import BaseModel, ValidationError
+
+from .ai_service import AIService
 from .auth_utils import get_current_user
 from .db import get_database
-from .ai_service import AIService
+from .models import AttachmentMeta, ComplaintCreate, ComplaintInDB, ComplaintResponse
 from .notification_routes import create_notification
 from .rag_modules.pipeline import RAGPipeline
-import uuid
 
 router = APIRouter(prefix="/complaints", tags=["complaints"])
 
-# Pydantic models
-class ComplaintCreate(BaseModel):
-    title: str
-    description: str
-    category: Optional[str] = None
-    location: str
-    contact_phone: str
-    contact_email: str
-    urgency: str = "medium"
+ATTACHMENT_ROOT = Path(__file__).resolve().parent.parent / "uploads" / "complaints"
+ATTACHMENT_ROOT.mkdir(parents=True, exist_ok=True)
+
 
 class ComplaintUpdate(BaseModel):
     status: Optional[str] = None
     assigned_department: Optional[str] = None
     admin_notes: Optional[str] = None
 
-class ComplaintResponse(BaseModel):
-    id: str
-    user_id: str
-    user_name: Optional[str] = None
-    user_email: Optional[str] = None
-    title: str
-    description: str
-    category: Optional[str] = None
-    location: Optional[str] = None
-    contact_phone: Optional[str] = None
-    contact_email: Optional[str] = None
-    urgency: Optional[str] = "medium"
-    status: Optional[str] = "pending"
-    priority_score: Optional[int] = 50
-    assigned_department: Optional[str] = None
-    ai_response: Optional[str] = None
-    ai_category: Optional[str] = None
-    ai_department: Optional[str] = None
-    estimated_resolution: Optional[str] = None
-    submitted_date: Optional[datetime] = None
-    last_updated: Optional[datetime] = None
-    attachments: List[str] = []
-    vector_db_id: Optional[str] = None
-    rag_summary: Optional[str] = None
-    rag_department: Optional[str] = None
-    rag_urgency: Optional[str] = None
-    rag_location: Optional[str] = None
-    rag_color: Optional[str] = None
-    rag_emoji: Optional[str] = None
-    rag_text_length: Optional[int] = None
-    rag_metadata: Optional[dict] = None
 
-# Initialize AI service
 ai_service = AIService()
 rag_pipeline = RAGPipeline()
 
-def transform_complaint_for_response(complaint_doc):
-    """Transform MongoDB complaint document to ComplaintResponse format"""
-    # Handle _id to id transformation
-    if "_id" in complaint_doc:
-        complaint_doc["id"] = complaint_doc.get("id") or str(complaint_doc["_id"])
-        del complaint_doc["_id"]
-    
-    # Ensure required fields have default values
-    defaults = {
-        "user_name": complaint_doc.get("user_name", ""),
-        "user_email": complaint_doc.get("user_email", ""),
-        "category": complaint_doc.get("category", "general"),
-        "location": complaint_doc.get("location", ""),
-        "contact_phone": complaint_doc.get("contact_phone", ""),
-        "contact_email": complaint_doc.get("contact_email", ""),
-        "urgency": complaint_doc.get("urgency", "medium"),
-        "status": complaint_doc.get("status", "pending"),
-        "priority_score": complaint_doc.get("priority_score", 50),
-        "assigned_department": complaint_doc.get("assigned_department", ""),
-        "ai_response": complaint_doc.get("ai_response", ""),
-        "ai_category": complaint_doc.get("ai_category", ""),
-        "ai_department": complaint_doc.get("ai_department", ""),
-        "estimated_resolution": complaint_doc.get("estimated_resolution", ""),
-        "submitted_date": complaint_doc.get("submitted_date") or complaint_doc.get("created_at"),
-        "last_updated": complaint_doc.get("last_updated") or complaint_doc.get("created_at"),
-        "attachments": complaint_doc.get("attachments", [])
-    }
-    
-    # Update complaint_doc with defaults for missing fields
-    for key, default_value in defaults.items():
-        if key not in complaint_doc or complaint_doc[key] is None:
-            complaint_doc[key] = default_value
-    
-    return complaint_doc
+
+def _sanitize_filename(filename: str) -> str:
+    allowed = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_."
+    sanitized = "".join(char if char in allowed else "_" for char in filename)
+    return sanitized or f"file_{uuid.uuid4().hex}"
+
+
+def _ensure_datetime(value: Any) -> Optional[datetime]:
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value
+    if isinstance(value, date):
+        return datetime.combine(value, datetime.min.time())
+    if isinstance(value, str):
+        try:
+            return datetime.fromisoformat(value)
+        except ValueError:
+            return None
+    return None
+
+
+def transform_complaint_for_response(complaint_doc: Dict[str, Any]) -> Dict[str, Any]:
+    document = dict(complaint_doc)
+
+    if "_id" in document:
+        document["mongo_id"] = document["_id"]
+        document.setdefault("id", str(document["_id"]))
+        del document["_id"]
+
+    document.setdefault("user_name", "")
+    document.setdefault("user_email", "")
+    document.setdefault("category", "general")
+    document.setdefault("location", "")
+    document.setdefault("contact_phone", "")
+    document.setdefault("contact_email", "")
+    document.setdefault("urgency", "medium")
+    document.setdefault("priority", "medium")
+    document.setdefault("status", "pending")
+    document.setdefault("priority_score", 50)
+    document.setdefault("assigned_department", "")
+    document.setdefault("ai_response", "")
+    document.setdefault("ai_category", "")
+    document.setdefault("ai_department", "")
+    document.setdefault("estimated_resolution", "")
+    document.setdefault("attachments", [])
+
+    document["submitted_date"] = _ensure_datetime(
+        document.get("submitted_date") or document.get("created_at")
+    )
+    document["last_updated"] = _ensure_datetime(
+        document.get("last_updated") or document.get("updated_at")
+    )
+    document["date_occurred"] = _ensure_datetime(document.get("date_occurred"))
+
+    attachments = []
+    for attachment in document.get("attachments", []):
+        if isinstance(attachment, dict):
+            attachments.append(attachment)
+        elif isinstance(attachment, AttachmentMeta):
+            attachments.append(attachment.dict())
+    document["attachments"] = attachments
+
+    return document
+
+
+async def _store_attachments(complaint_id: str, uploads: Optional[List[UploadFile]]) -> List[Dict[str, Any]]:
+    if not uploads:
+        return []
+
+    complaint_dir = ATTACHMENT_ROOT / complaint_id
+    complaint_dir.mkdir(parents=True, exist_ok=True)
+
+    stored: List[Dict[str, Any]] = []
+    for upload in uploads:
+        if not upload.filename:
+            continue
+
+        safe_name = _sanitize_filename(upload.filename)
+        destination = complaint_dir / safe_name
+        data = await upload.read()
+        await upload.seek(0)
+        destination.write_bytes(data)
+
+        stored.append(
+            {
+                "filename": safe_name,
+                "content_type": upload.content_type,
+                "path": str(Path("uploads") / "complaints" / complaint_id / safe_name),
+                "size": len(data),
+            }
+        )
+
+    return stored
+
 
 @router.post("/new", response_model=dict)
 async def submit_complaint(
-    complaint: ComplaintCreate,
-    current_user: UserResponse = Depends(get_current_user)
+    title: str = Form(...),
+    description: str = Form(...),
+    category: Optional[str] = Form(None),
+    location: str = Form(...),
+    urgency: str = Form("medium"),
+    date_occurred: Optional[str] = Form(None),
+    phone: Optional[str] = Form(None),
+    email: Optional[str] = Form(None),
+    attachments: Optional[List[UploadFile]] = File(None),
+    current_user: Dict[str, Any] = Depends(get_current_user),
 ):
-    """Submit a new complaint with AI processing"""
     try:
+        occurrence_date: Optional[date] = None
+        if date_occurred:
+            try:
+                occurrence_date = datetime.strptime(date_occurred, "%Y-%m-%d").date()
+            except ValueError:
+                raise HTTPException(status_code=422, detail="Invalid date format for date_occurred. Use YYYY-MM-DD.")
+
+        contact_email = email or current_user.get("email")
+        contact_phone = phone or current_user.get("phone")
+
+        try:
+            complaint_payload = ComplaintCreate(
+                title=title,
+                description=description,
+                category=category,
+                location=location,
+                urgency=urgency,
+                date_occurred=occurrence_date,
+                contact_email=contact_email,
+                contact_phone=contact_phone,
+            )
+        except ValidationError as validation_error:
+            raise HTTPException(status_code=422, detail=validation_error.errors())
+
         db = get_database()
         complaints_collection = db.complaints
-        
-        # Generate complaint ID
+
         complaint_id = f"CMP{uuid.uuid4().hex[:6].upper()}"
         submitted_time = datetime.utcnow()
         status_value = "pending"
+
         priority_map = {
             "urgent": "high",
             "high": "high",
             "medium": "medium",
-            "low": "low"
+            "low": "low",
         }
-        urgency_lower = complaint.urgency.lower() if complaint.urgency else "medium"
+        urgency_lower = (complaint_payload.urgency or "medium").lower()
         priority_value = priority_map.get(urgency_lower, "medium")
 
-        # First, process complaint through RAG pipeline
         try:
             rag_result = rag_pipeline.process_text_complaint(
-                title=complaint.title,
-                description=complaint.description,
+                title=complaint_payload.title,
+                description=complaint_payload.description,
                 metadata={
                     "complaint_id": complaint_id,
                     "user_id": current_user["user_id"],
                     "user_email": current_user["email"],
-                    "category_input": complaint.category,
-                    "urgency_input": complaint.urgency,
-                    "location_input": complaint.location
-                }
+                    "category_input": complaint_payload.category,
+                    "urgency_input": complaint_payload.urgency,
+                    "location_input": complaint_payload.location,
+                },
             )
         except Exception as rag_error:
-            raise HTTPException(status_code=500, detail=f"RAG processing failed: {str(rag_error)}")
+            raise HTTPException(status_code=500, detail=f"RAG processing failed: {rag_error}")
 
         if not rag_result.get("is_relevant", True):
             raise HTTPException(
@@ -147,112 +204,112 @@ async def submit_complaint(
                     "reason": rag_result.get("relevance_reason", "No justification provided"),
                     "confidence": rag_result.get("relevance_confidence", 0.0),
                     "category": rag_result.get("relevance_category", "unknown"),
-                    "summary": rag_result.get("summary", "")
-                }
+                    "summary": rag_result.get("summary", ""),
+                },
             )
-        
-        # AI Processing
+
         ai_analysis = await ai_service.analyze_complaint(
-            title=complaint.title,
-            description=complaint.description,
-            urgency=complaint.urgency,
-            location=complaint.location
+            title=complaint_payload.title,
+            description=complaint_payload.description,
+            urgency=complaint_payload.urgency,
+            location=complaint_payload.location,
         )
-        
-        # Create complaint document
-        complaint_doc = {
-            "id": complaint_id,
-            "user_id": current_user["user_id"],
-            "user_name": current_user["full_name"],
-            "user_email": current_user["email"],
-            "title": complaint.title,
-            "description": complaint.description,
-            "category": rag_result.get("department") or ai_analysis["category"],
-            "location": complaint.location,
-            "contact_phone": complaint.contact_phone,
-            "contact_email": complaint.contact_email,
-            "urgency": complaint.urgency,
-            "status": status_value,
-            "priority": priority_value,
-            "priority_score": ai_analysis["priority_score"],
-            "assigned_department": ai_analysis["assigned_department"],
-            "ai_response": ai_analysis["suggested_response"],
-            "ai_category": ai_analysis["category"],
-            "ai_department": ai_analysis["assigned_department"],
-            "estimated_resolution": ai_analysis["estimated_resolution"],
-            "submitted_date": submitted_time,
-            "last_updated": submitted_time,
-            "created_at": submitted_time,
-            "updated_at": submitted_time,
-            "attachments": [],
-            "vector_db_id": rag_result["document_id"],
-            "rag_summary": rag_result["summary"],
-            "rag_department": rag_result["department"],
-            "rag_urgency": rag_result["urgency"],
-            "rag_location": rag_result["location"],
-            "rag_color": rag_result["color"],
-            "rag_emoji": rag_result["emoji"],
-            "rag_text_length": rag_result["text_length"],
-            "rag_metadata": rag_result.get("metadata", {}),
-            "status_history": [
+
+        stored_attachments = await _store_attachments(complaint_id, attachments)
+
+        complaint_document = ComplaintInDB(
+            id=complaint_id,
+            user_id=current_user["user_id"],
+            user_name=current_user.get("full_name"),
+            user_email=current_user.get("email"),
+            title=complaint_payload.title,
+            description=complaint_payload.description,
+            category=rag_result.get("department") or ai_analysis["category"],
+            location=complaint_payload.location,
+            contact_phone=complaint_payload.contact_phone,
+            contact_email=complaint_payload.contact_email,
+            urgency=complaint_payload.urgency,
+            status=status_value,
+            priority=priority_value,
+            priority_score=ai_analysis["priority_score"],
+            assigned_department=ai_analysis["assigned_department"],
+            ai_response=ai_analysis["suggested_response"],
+            ai_category=ai_analysis["category"],
+            ai_department=ai_analysis["assigned_department"],
+            estimated_resolution=ai_analysis["estimated_resolution"],
+            submitted_date=submitted_time,
+            last_updated=submitted_time,
+            created_at=submitted_time,
+            updated_at=submitted_time,
+            date_occurred=occurrence_date,
+            attachments=[AttachmentMeta(**item) for item in stored_attachments],
+            vector_db_id=rag_result.get("document_id"),
+            rag_summary=rag_result.get("summary"),
+            rag_department=rag_result.get("department"),
+            rag_urgency=rag_result.get("urgency"),
+            rag_location=rag_result.get("location"),
+            rag_color=rag_result.get("color"),
+            rag_emoji=rag_result.get("emoji"),
+            rag_text_length=rag_result.get("text_length"),
+            rag_metadata=rag_result.get("metadata", {}),
+            status_history=[
                 {
                     "status": status_value,
                     "timestamp": submitted_time,
-                    "note": "Complaint submitted, processed by RAG and AI analysis"
+                    "note": "Complaint submitted, processed by RAG and AI analysis",
                 }
-            ]
-        }
-        
-        # Insert into database
-        result = complaints_collection.insert_one(complaint_doc)
-        
-        if result.inserted_id:
-            # Create notification with complaint details
-            await create_notification(
-                user_id=current_user["user_id"],
-                title="Complaint Submitted",
-                message=f"Your complaint '{complaint.title}' has been submitted and processed by the RAG intelligence pipeline.",
-                type="submitted",
-                related_complaint_id=complaint_id,
-                problem_type=rag_result.get("department", "general").lower().replace(" ", "_"),
-                department=rag_result.get("department"),
-                urgency=complaint.urgency
-            )
-            rag_payload = {
-                "document_id": rag_result["document_id"],
-                "summary": rag_result["summary"],
-                "urgency": rag_result["urgency"],
-                "department": rag_result["department"],
-                "location": rag_result["location"],
-                "color": rag_result["color"],
-                "emoji": rag_result["emoji"],
-                "text_length": rag_result["text_length"]
-            }
+            ],
+        )
 
-            return {
-                "success": True,
-                "complaint_id": complaint_id,
-                "vector_db_id": rag_result["document_id"],
-                "rag_analysis": rag_payload,
-                "ai_summary": {
-                    "category": ai_analysis["category"],
-                    "priority_score": ai_analysis["priority_score"],
-                    "assigned_department": ai_analysis["assigned_department"],
-                    "suggested_response": ai_analysis["suggested_response"],
-                    "estimated_resolution": ai_analysis["estimated_resolution"]
-                }
-            }
-        else:
+        result = complaints_collection.insert_one(complaint_document.dict())
+
+        if not result.inserted_id:
             raise HTTPException(status_code=500, detail="Failed to submit complaint")
-            
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error submitting complaint: {str(e)}")
+
+        await create_notification(
+            user_id=current_user["user_id"],
+            title="Complaint Submitted",
+            message=f"Your complaint '{complaint_payload.title}' has been submitted and processed by the RAG intelligence pipeline.",
+            type="submitted",
+            related_complaint_id=complaint_id,
+            problem_type=(rag_result.get("department") or "general").lower().replace(" ", "_"),
+            department=rag_result.get("department"),
+            urgency=complaint_payload.urgency,
+        )
+
+        return {
+            "success": True,
+            "complaint_id": complaint_id,
+            "id": complaint_id,
+            "vector_db_id": rag_result.get("document_id"),
+            "rag_analysis": {
+                "document_id": rag_result.get("document_id"),
+                "summary": rag_result.get("summary"),
+                "urgency": rag_result.get("urgency"),
+                "department": rag_result.get("department"),
+                "location": rag_result.get("location"),
+                "color": rag_result.get("color"),
+                "emoji": rag_result.get("emoji"),
+                "text_length": rag_result.get("text_length"),
+            },
+            "ai_summary": {
+                "category": ai_analysis["category"],
+                "priority_score": ai_analysis["priority_score"],
+                "assigned_department": ai_analysis["assigned_department"],
+                "suggested_response": ai_analysis["suggested_response"],
+                "estimated_resolution": ai_analysis["estimated_resolution"],
+            },
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Error submitting complaint: {exc}")
 
 @router.get("/my-complaints", response_model=List[ComplaintResponse])
 async def get_my_complaints(
-    current_user: UserResponse = Depends(get_current_user),
+    current_user: Dict[str, Any] = Depends(get_current_user),
     status: Optional[str] = None,
-    category: Optional[str] = None
+    category: Optional[str] = None,
 ):
     """Get current user's complaints"""
     try:
@@ -267,7 +324,7 @@ async def get_my_complaints(
             query["category"] = category
         
         # Fetch complaints
-        complaints_cursor = complaints_collection.find(query).sort("submitted_date", -1)
+        complaints_cursor = complaints_collection.find(query).sort([("submitted_date", -1), ("created_at", -1)])
         complaints = list(complaints_cursor)
         
         # Convert to response format
@@ -284,10 +341,10 @@ async def get_my_complaints(
 @router.get("/user/{user_id}", response_model=List[ComplaintResponse])
 async def get_user_complaints_by_id(
     user_id: str,
-    current_user: UserResponse = Depends(get_current_user),
+    current_user: Dict[str, Any] = Depends(get_current_user),
     status: Optional[str] = None,
     category: Optional[str] = None,
-    limit: Optional[int] = None
+    limit: Optional[int] = None,
 ):
     """Get complaints for a specific user"""
     try:
@@ -307,7 +364,7 @@ async def get_user_complaints_by_id(
             query["category"] = category
         
         # Fetch complaints with optional limit
-        complaints_cursor = complaints_collection.find(query).sort("submitted_date", -1)
+        complaints_cursor = complaints_collection.find(query).sort([("submitted_date", -1), ("created_at", -1)])
         if limit:
             complaints_cursor = complaints_cursor.limit(limit)
         
@@ -329,7 +386,7 @@ async def get_user_complaints_by_id(
 @router.get("/{complaint_id}", response_model=ComplaintResponse)
 async def get_complaint_details(
     complaint_id: str,
-    current_user: UserResponse = Depends(get_current_user)
+    current_user: Dict[str, Any] = Depends(get_current_user),
 ):
     """Get detailed information about a specific complaint"""
     try:
@@ -358,7 +415,7 @@ async def get_complaint_details(
 async def update_complaint_status(
     complaint_id: str,
     update: ComplaintUpdate,
-    current_user: UserResponse = Depends(get_current_user)
+    current_user: Dict[str, Any] = Depends(get_current_user),
 ):
     """Update complaint status (admin only)"""
     try:
@@ -440,7 +497,7 @@ async def update_complaint_status(
 @router.delete("/{complaint_id}")
 async def delete_complaint(
     complaint_id: str,
-    current_user: UserResponse = Depends(get_current_user)
+    current_user: Dict[str, Any] = Depends(get_current_user),
 ):
     """Delete a complaint (user can delete own complaints)"""
     try:
@@ -472,11 +529,11 @@ async def delete_complaint(
 # Collector/Admin endpoints
 @router.get("/collector/all", response_model=List[ComplaintResponse])
 async def get_all_complaints(
-    current_user: UserResponse = Depends(get_current_user),
+    current_user: Dict[str, Any] = Depends(get_current_user),
     status: Optional[str] = None,
     category: Optional[str] = None,
     urgency: Optional[str] = None,
-    sort_by: str = "priority_score"
+    sort_by: str = "priority_score",
 ):
     """Get all complaints for collectors/admins"""
     try:
@@ -499,8 +556,8 @@ async def get_all_complaints(
         # Sort options
         sort_options = {
             "priority_score": [("priority_score", -1)],
-            "date": [("submitted_date", -1)],
-            "status": [("status", 1)]
+            "date": [("submitted_date", -1), ("created_at", -1)],
+            "status": [("status", 1)],
         }
         
         sort_criteria = sort_options.get(sort_by, [("priority_score", -1)])
@@ -521,26 +578,6 @@ async def get_all_complaints(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error fetching complaints: {str(e)}")
-
-async def create_notification(user_id: str, title: str, message: str, type: str):
-    """Helper function to create notifications"""
-    try:
-        db = get_database()
-        notifications_collection = db.notifications
-        
-        notification = {
-            "id": str(uuid.uuid4()),
-            "user_id": user_id,
-            "title": title,
-            "message": message,
-            "type": type,
-            "is_read": False,
-            "timestamp": datetime.utcnow()
-        }
-        
-        notifications_collection.insert_one(notification)
-    except Exception as e:
-        print(f"Error creating notification: {e}")
 
 @router.get("/user-dashboard-stats")
 async def get_user_dashboard_stats(current_user: dict = Depends(get_current_user)):

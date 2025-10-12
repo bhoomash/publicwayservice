@@ -1,6 +1,7 @@
+from datetime import datetime, date
+from typing import Any, Dict, List, Optional
+
 from pydantic import BaseModel, EmailStr, Field
-from typing import Optional
-from datetime import datetime
 
 # User Models
 class UserCreate(BaseModel):
@@ -79,13 +80,61 @@ class PasswordReset(BaseModel):
     otp_code: str
     new_password: str = Field(..., min_length=8)
 
-# Complaint Model (keeping existing)
-class Complaint(BaseModel):
-    name: str
-    phone: str
-    message: str
-    language: Optional[str] = "english"
-    status: Optional[str] = "pending"
+class AttachmentMeta(BaseModel):
+    filename: str
+    content_type: Optional[str] = None
+    path: Optional[str] = None
+    size: Optional[int] = None
+
+
+class ComplaintBase(BaseModel):
+    title: str
+    description: str
+    category: Optional[str] = None
+    location: str
+    urgency: str = Field("medium", pattern="^(low|medium|high|urgent)$")
+    date_occurred: Optional[date] = None
+
+
+class ComplaintCreate(ComplaintBase):
+    contact_phone: Optional[str] = Field(None, min_length=7, max_length=20)
+    contact_email: Optional[EmailStr] = None
+
+
+class ComplaintInDB(ComplaintBase):
+    id: str
+    user_id: str
+    user_name: Optional[str] = None
+    user_email: Optional[str] = None
+    contact_phone: Optional[str] = None
+    contact_email: Optional[str] = None
+    priority: Optional[str] = "medium"
+    priority_score: Optional[int] = 50
+    status: str = "pending"
+    assigned_department: Optional[str] = None
+    ai_response: Optional[str] = None
+    ai_category: Optional[str] = None
+    ai_department: Optional[str] = None
+    estimated_resolution: Optional[str] = None
+    submitted_date: Optional[datetime] = None
+    last_updated: Optional[datetime] = None
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+    attachments: List[AttachmentMeta] = Field(default_factory=list)
+    vector_db_id: Optional[str] = None
+    rag_summary: Optional[str] = None
+    rag_department: Optional[str] = None
+    rag_urgency: Optional[str] = None
+    rag_location: Optional[str] = None
+    rag_color: Optional[str] = None
+    rag_emoji: Optional[str] = None
+    rag_text_length: Optional[int] = None
+    rag_metadata: Optional[Dict[str, str]] = None
+    status_history: List[Dict[str, Any]] = Field(default_factory=list)
+
+
+class ComplaintResponse(ComplaintInDB):
+    pass
 
 # Profile Update Models
 class Address(BaseModel):
