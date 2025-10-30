@@ -14,6 +14,8 @@ from .db import get_database
 from .models import AttachmentMeta, ComplaintCreate, ComplaintInDB, ComplaintResponse
 from .notification_routes import create_notification
 from .rag_modules.pipeline import RAGPipeline
+from .utils.document_storage import get_document_storage
+from .utils.pdf_generator import generate_complaint_document
 
 router = APIRouter(prefix="/complaints", tags=["complaints"])
 
@@ -281,6 +283,66 @@ async def submit_complaint(
         if not result.inserted_id:
             raise HTTPException(status_code=500, detail="Failed to submit complaint")
 
+        # Generate and store PDF document for the complaint
+        try:
+            doc_storage = get_document_storage(db)
+            
+            # Determine if user uploaded a document or filled form
+            has_uploaded_file = bool(attachments and len(attachments) > 0)
+            
+            if has_uploaded_file:
+                # Store the first uploaded file as the main document
+                first_attachment = attachments[0]
+                file_data = await first_attachment.read()
+                await first_attachment.seek(0)
+                
+                document_id = doc_storage.store_document(
+                    file_data=file_data,
+                    filename=first_attachment.filename or "complaint_document",
+                    content_type=first_attachment.content_type or "application/octet-stream",
+                    metadata={
+                        "complaint_id": complaint_id,
+                        "user_id": current_user["user_id"],
+                        "document_type": "uploaded"
+                    }
+                )
+                
+                # Update complaint with document reference
+                complaints_collection.update_one(
+                    {"id": complaint_id},
+                    {"$set": {
+                        "document_id": document_id,
+                        "document_type": "uploaded"
+                    }}
+                )
+            else:
+                # Generate PDF from form data
+                complaint_data = complaint_document.dict()
+                pdf_bytes = generate_complaint_document(complaint_data)
+                
+                document_id = doc_storage.store_document(
+                    file_data=pdf_bytes,
+                    filename=f"complaint_{complaint_id}.pdf",
+                    content_type="application/pdf",
+                    metadata={
+                        "complaint_id": complaint_id,
+                        "user_id": current_user["user_id"],
+                        "document_type": "generated"
+                    }
+                )
+                
+                # Update complaint with document reference
+                complaints_collection.update_one(
+                    {"id": complaint_id},
+                    {"$set": {
+                        "document_id": document_id,
+                        "document_type": "generated"
+                    }}
+                )
+        except Exception as doc_error:
+            # Log error but don't fail the complaint submission
+            print(f"Error storing complaint document: {doc_error}")
+
         await create_notification(
             user_id=current_user["user_id"],
             title="Complaint Submitted",
@@ -425,6 +487,63 @@ async def get_complaint_details(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error fetching complaint: {str(e)}")
+
+@router.get("/{complaint_id}/document")
+async def get_complaint_document(
+    complaint_id: str,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+):
+    """Get the stored document (uploaded or generated PDF) for a complaint"""
+    from fastapi.responses import Response
+    from bson import ObjectId
+    
+    try:
+        db = get_database()
+        complaints_collection = db.complaints
+        
+        # Try to find complaint by both id and _id fields
+        complaint = complaints_collection.find_one({"id": complaint_id})
+        if not complaint:
+            # Try finding by MongoDB _id if complaint_id looks like an ObjectId
+            try:
+                if ObjectId.is_valid(complaint_id):
+                    complaint = complaints_collection.find_one({"_id": ObjectId(complaint_id)})
+            except:
+                pass
+        
+        if not complaint:
+            raise HTTPException(status_code=404, detail="Complaint not found")
+        
+        # Check permissions - users can view their own, admins can view all
+        if current_user.get("role") not in ["admin", "collector"] and complaint.get("user_id") != current_user["user_id"]:
+            raise HTTPException(status_code=403, detail="Access denied")
+        
+        # Check if document exists
+        document_id = complaint.get("document_id")
+        if not document_id:
+            raise HTTPException(status_code=404, detail="No document stored for this complaint")
+        
+        # Retrieve document from GridFS
+        doc_storage = get_document_storage(db)
+        document = doc_storage.get_document(document_id)
+        
+        if not document:
+            raise HTTPException(status_code=404, detail="Document not found in storage")
+        
+        # Return document with appropriate headers
+        return Response(
+            content=document["data"],
+            media_type=document["content_type"],
+            headers={
+                "Content-Disposition": f'inline; filename="{document["filename"]}"',
+                "Cache-Control": "no-cache"
+            }
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error retrieving document: {str(e)}")
 
 @router.put("/{complaint_id}/status")
 async def update_complaint_status(

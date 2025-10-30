@@ -121,6 +121,8 @@ class ComplaintInDB(ComplaintBase):
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
     attachments: List[AttachmentMeta] = Field(default_factory=list)
+    document_id: Optional[str] = None  # GridFS file ID for stored document
+    document_type: Optional[str] = None  # 'uploaded' or 'generated'
     vector_db_id: Optional[str] = None
     rag_summary: Optional[str] = None
     rag_department: Optional[str] = None

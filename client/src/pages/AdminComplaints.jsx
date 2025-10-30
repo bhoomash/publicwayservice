@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { adminAPI } from '../utils/api';
+import { adminAPI, complaintsAPI } from '../utils/api';
 import ComplaintDetailDrawer from '../components/ComplaintDetailDrawer';
 import Layout from '../components/Layout';
 import { 
@@ -15,7 +15,8 @@ import {
   AlertTriangle,
   CheckCircle,
   Clock,
-  XCircle
+  XCircle,
+  Download
 } from 'lucide-react';
 
 const AdminComplaints = () => {
@@ -30,6 +31,10 @@ const AdminComplaints = () => {
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [sortBy, setSortBy] = useState('priority');
   const navigate = useNavigate();
+  const [showDocumentModal, setShowDocumentModal] = useState(false);
+  const [documentUrl, setDocumentUrl] = useState(null);
+  const [loadingDocument, setLoadingDocument] = useState(false);
+  const [currentComplaintId, setCurrentComplaintId] = useState(null);
 
   useEffect(() => {
     loadComplaints();
@@ -96,7 +101,11 @@ const AdminComplaints = () => {
     setFilteredComplaints(filtered);
   };
 
-  const handleStatusUpdate = async (complaint, newStatus) => {
+  const handleStatusUpdate = async (complaint, newStatus, e) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
     try {
       // Ensure we're using the MongoDB _id
       const id = complaint?._id || complaint?.id;
@@ -111,7 +120,11 @@ const AdminComplaints = () => {
     }
   };
 
-  const handleAssignDepartment = async (complaint, department) => {
+  const handleAssignDepartment = async (complaint, department, e) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
     try {
       // Ensure we're using the MongoDB _id
       const id = complaint?._id || complaint?.id;
@@ -124,6 +137,40 @@ const AdminComplaints = () => {
     } catch (error) {
       console.error('Error assigning department:', error);
     }
+  };
+
+  const handleViewDocument = async (complaint, e) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    try {
+      const id = complaint?._id || complaint?.id;
+      if (!id) throw new Error('Invalid complaint ID');
+
+      setCurrentComplaintId(id);
+      setLoadingDocument(true);
+      setShowDocumentModal(true);
+      
+      const blob = await complaintsAPI.getComplaintDocument(id);
+      const url = URL.createObjectURL(blob);
+      setDocumentUrl(url);
+    } catch (error) {
+      console.error('Error loading document:', error);
+      alert('Failed to load document. The complaint may not have a stored document.');
+      setShowDocumentModal(false);
+    } finally {
+      setLoadingDocument(false);
+    }
+  };
+
+  const closeDocumentModal = () => {
+    if (documentUrl) {
+      URL.revokeObjectURL(documentUrl);
+      setDocumentUrl(null);
+    }
+    setShowDocumentModal(false);
+    setCurrentComplaintId(null);
   };
 
   const getStatusLabel = (status) => {
@@ -447,15 +494,21 @@ const AdminComplaints = () => {
                       <Eye className="w-4 h-4" />
                       <span>View Details</span>
                     </button>
+                    
+                    <button
+                      onClick={(e) => handleViewDocument(complaint, e)}
+                      className="flex items-center space-x-2 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors text-sm"
+                    >
+                      <FileText className="w-4 h-4" />
+                      <span>View Document</span>
+                    </button>
                   </div>
                   
                   <div className="flex items-center space-x-3">
                     <select
                       value={complaint?.status || 'pending'}
-                      onChange={(e) => {
-                        e.stopPropagation();
-                        handleStatusUpdate(complaint, e.target.value);
-                      }}
+                      onChange={(e) => handleStatusUpdate(complaint, e.target.value, e)}
+                      onClick={(e) => e.stopPropagation()}
                       className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
                     >
                       <option value="pending">Pending</option>
@@ -466,10 +519,8 @@ const AdminComplaints = () => {
                     
                     <select
                       value={complaint?.assigned_department || ''}
-                      onChange={(e) => {
-                        e.stopPropagation();
-                        handleAssignDepartment(complaint, e.target.value);
-                      }}
+                      onChange={(e) => handleAssignDepartment(complaint, e.target.value, e)}
+                      onClick={(e) => e.stopPropagation()}
                       className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
                     >
                       <option value="">Assign Department</option>
@@ -515,6 +566,66 @@ const AdminComplaints = () => {
             </div>
           )}
         </div>
+
+        {/* Document Viewer Modal */}
+        {showDocumentModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-lg shadow-xl max-w-6xl w-full max-h-[90vh] flex flex-col">
+              {/* Modal Header */}
+              <div className="flex items-center justify-between p-4 border-b">
+                <h3 className="text-lg font-semibold text-gray-900">Complaint Document</h3>
+                <button
+                  onClick={closeDocumentModal}
+                  className="text-gray-400 hover:text-gray-600 transition-colors"
+                >
+                  <XCircle className="w-6 h-6" />
+                </button>
+              </div>
+              
+              {/* Modal Body */}
+              <div className="flex-1 overflow-auto p-4">
+                {loadingDocument ? (
+                  <div className="flex items-center justify-center h-full min-h-[400px]">
+                    <div className="flex flex-col items-center space-y-4">
+                      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+                      <p className="text-gray-600">Loading document...</p>
+                    </div>
+                  </div>
+                ) : documentUrl ? (
+                  <iframe
+                    src={documentUrl}
+                    className="w-full h-full min-h-[600px] border-0"
+                    title="Complaint Document"
+                  />
+                ) : (
+                  <div className="flex items-center justify-center h-full min-h-[400px] text-gray-500">
+                    Failed to load document
+                  </div>
+                )}
+              </div>
+              
+              {/* Modal Footer */}
+              <div className="flex items-center justify-end space-x-3 p-4 border-t">
+                {documentUrl && (
+                  <a
+                    href={documentUrl}
+                    download={`complaint_${currentComplaintId}.pdf`}
+                    className="inline-flex items-center px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors text-sm font-medium"
+                  >
+                    <Download className="w-4 h-4 mr-2" />
+                    Download
+                  </a>
+                )}
+                <button
+                  onClick={closeDocumentModal}
+                  className="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors text-sm font-medium"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Complaint Detail Drawer */}
         <ComplaintDetailDrawer

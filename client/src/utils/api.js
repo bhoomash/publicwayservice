@@ -211,6 +211,14 @@ export const complaintsAPI = {
     return response.data;
   },
 
+  // Get complaint document (PDF or uploaded file)
+  getComplaintDocument: async (complaintId) => {
+    const response = await api.get(`/complaints/${complaintId}/document`, {
+      responseType: 'blob'
+    });
+    return response.data;
+  },
+
   // Get all complaints (collector/admin)
   getAllComplaints: async (filters = {}) => {
     const params = new URLSearchParams();

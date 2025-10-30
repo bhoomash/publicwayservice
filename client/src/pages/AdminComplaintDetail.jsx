@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { adminAPI } from '../utils/api';
+import { adminAPI, complaintsAPI } from '../utils/api';
 
 const AdminComplaintDetail = () => {
   const { id } = useParams();
@@ -10,6 +10,9 @@ const AdminComplaintDetail = () => {
   const [notes, setNotes] = useState([]);
   const [newNote, setNewNote] = useState('');
   const [addingNote, setAddingNote] = useState(false);
+  const [showDocumentModal, setShowDocumentModal] = useState(false);
+  const [documentUrl, setDocumentUrl] = useState(null);
+  const [loadingDocument, setLoadingDocument] = useState(false);
 
   useEffect(() => {
     loadComplaintDetails();
@@ -65,6 +68,31 @@ const AdminComplaintDetail = () => {
     } finally {
       setAddingNote(false);
     }
+  };
+
+  const handleViewDocument = async () => {
+    try {
+      setLoadingDocument(true);
+      setShowDocumentModal(true);
+      
+      const blob = await complaintsAPI.getComplaintDocument(id);
+      const url = URL.createObjectURL(blob);
+      setDocumentUrl(url);
+    } catch (error) {
+      console.error('Error loading document:', error);
+      alert('Failed to load document. The complaint may not have a stored document.');
+      setShowDocumentModal(false);
+    } finally {
+      setLoadingDocument(false);
+    }
+  };
+
+  const closeDocumentModal = () => {
+    if (documentUrl) {
+      URL.revokeObjectURL(documentUrl);
+      setDocumentUrl(null);
+    }
+    setShowDocumentModal(false);
   };
 
   const getPriorityColor = (priority) => {
@@ -123,6 +151,15 @@ const AdminComplaintDetail = () => {
               <h1 className="text-2xl font-bold text-gray-900">Complaint #{complaint.id}</h1>
             </div>
             <div className="flex items-center space-x-3">
+              <button
+                onClick={handleViewDocument}
+                className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors text-sm font-medium"
+              >
+                <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                </svg>
+                View Document
+              </button>
               <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium border ${getPriorityColor(complaint.priority)}`}>
                 {complaint.priority?.toUpperCase() || 'UNKNOWN'} PRIORITY
               </span>
@@ -133,6 +170,67 @@ const AdminComplaintDetail = () => {
           </div>
         </div>
       </div>
+
+      {/* Document Viewer Modal */}
+      {showDocumentModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-6xl w-full max-h-[90vh] flex flex-col">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between p-4 border-b">
+              <h3 className="text-lg font-semibold text-gray-900">Complaint Document</h3>
+              <button
+                onClick={closeDocumentModal}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            
+            {/* Modal Body */}
+            <div className="flex-1 overflow-auto p-4">
+              {loadingDocument ? (
+                <div className="flex items-center justify-center h-full">
+                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+                </div>
+              ) : documentUrl ? (
+                <iframe
+                  src={documentUrl}
+                  className="w-full h-full min-h-[600px] border-0"
+                  title="Complaint Document"
+                />
+              ) : (
+                <div className="flex items-center justify-center h-full text-gray-500">
+                  Failed to load document
+                </div>
+              )}
+            </div>
+            
+            {/* Modal Footer */}
+            <div className="flex items-center justify-end space-x-3 p-4 border-t">
+              {documentUrl && (
+                <a
+                  href={documentUrl}
+                  download={`complaint_${id}.pdf`}
+                  className="inline-flex items-center px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors text-sm font-medium"
+                >
+                  <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                  </svg>
+                  Download
+                </a>
+              )}
+              <button
+                onClick={closeDocumentModal}
+                className="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors text-sm font-medium"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">

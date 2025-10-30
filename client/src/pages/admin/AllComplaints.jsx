@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import Layout from '../../components/Layout';
-import { adminAPI } from '../../utils/api';
+import { adminAPI, complaintsAPI } from '../../utils/api';
 import { 
   Search, 
   Filter, 
@@ -10,7 +10,10 @@ import {
   CheckCircle,
   Building,
   Calendar,
-  User
+  User,
+  FileText,
+  Download,
+  XCircle
 } from 'lucide-react';
 import {
   getPriorityColorClass,
@@ -45,6 +48,10 @@ const AllComplaints = () => {
   const [departments, setDepartments] = useState([]);
   const [notes, setNotes] = useState({}); // Per-complaint notes storage
   const [showModal, setShowModal] = useState(false);
+  const [showDocumentModal, setShowDocumentModal] = useState(false);
+  const [documentUrl, setDocumentUrl] = useState(null);
+  const [loadingDocument, setLoadingDocument] = useState(false);
+  const [currentComplaintId, setCurrentComplaintId] = useState(null);
 
   useEffect(() => {
     fetchComplaints();
@@ -200,6 +207,40 @@ const AllComplaints = () => {
   // Handle updating note input for specific complaint
   const updateNote = (complaintId, value) => {
     setNotes(prev => ({ ...prev, [complaintId]: value }));
+  };
+
+  const handleViewDocument = async (complaintId, e) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    try {
+      setCurrentComplaintId(complaintId);
+      setLoadingDocument(true);
+      setShowDocumentModal(true);
+      
+      const blob = await complaintsAPI.getComplaintDocument(complaintId);
+      const url = URL.createObjectURL(blob);
+      setDocumentUrl(url);
+    } catch (error) {
+      console.error('Error loading document:', error);
+      const errorMessage = error.response?.status === 404 
+        ? 'No document available for this complaint.\n\nThis complaint was likely submitted before the document storage feature was implemented.\n\nNew complaints will automatically have documents generated and stored.'
+        : 'Failed to load document. Please try again.';
+      alert(errorMessage);
+      setShowDocumentModal(false);
+    } finally {
+      setLoadingDocument(false);
+    }
+  };
+
+  const closeDocumentModal = () => {
+    if (documentUrl) {
+      URL.revokeObjectURL(documentUrl);
+      setDocumentUrl(null);
+    }
+    setShowDocumentModal(false);
+    setCurrentComplaintId(null);
   };
 
   if (loading) {
@@ -507,6 +548,13 @@ const AllComplaints = () => {
                             >
                               <Eye size={16} />
                             </button>
+                            <button
+                              onClick={(e) => handleViewDocument(complaint.id, e)}
+                              className="text-green-600 hover:text-green-900"
+                              title="View Document"
+                            >
+                              <FileText size={16} />
+                            </button>
                             <select
                               value={complaint.status || 'pending'}
                               onChange={(e) => updateComplaintStatus(complaint.id, e.target.value)}
@@ -645,6 +693,13 @@ const AllComplaints = () => {
                             >
                               <Eye size={16} />
                             </button>
+                            <button
+                              onClick={(e) => handleViewDocument(complaint.id, e)}
+                              className="text-green-600 hover:text-green-900"
+                              title="View Document"
+                            >
+                              <FileText size={16} />
+                            </button>
                             <select
                               value={complaint.status || 'pending'}
                               onChange={(e) => updateComplaintStatus(complaint.id, e.target.value)}
@@ -704,6 +759,66 @@ const AllComplaints = () => {
           )}
         </div>
       </div>
+
+      {/* Document Viewer Modal */}
+      {showDocumentModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-6xl w-full max-h-[90vh] flex flex-col">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between p-4 border-b">
+              <h3 className="text-lg font-semibold text-gray-900">Complaint Document</h3>
+              <button
+                onClick={closeDocumentModal}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <XCircle className="w-6 h-6" />
+              </button>
+            </div>
+            
+            {/* Modal Body */}
+            <div className="flex-1 overflow-auto p-4">
+              {loadingDocument ? (
+                <div className="flex items-center justify-center h-full min-h-[400px]">
+                  <div className="flex flex-col items-center space-y-4">
+                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+                    <p className="text-gray-600">Loading document...</p>
+                  </div>
+                </div>
+              ) : documentUrl ? (
+                <iframe
+                  src={documentUrl}
+                  className="w-full h-full min-h-[600px] border-0"
+                  title="Complaint Document"
+                />
+              ) : (
+                <div className="flex items-center justify-center h-full min-h-[400px] text-gray-500">
+                  Failed to load document
+                </div>
+              )}
+            </div>
+            
+            {/* Modal Footer */}
+            <div className="flex items-center justify-end space-x-3 p-4 border-t">
+              {documentUrl && (
+                <a
+                  href={documentUrl}
+                  download={`complaint_${currentComplaintId}.pdf`}
+                  className="inline-flex items-center px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors text-sm font-medium"
+                >
+                  <Download className="w-4 h-4 mr-2" />
+                  Download
+                </a>
+              )}
+              <button
+                onClick={closeDocumentModal}
+                className="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors text-sm font-medium"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Complaint Details Modal */}
       {showModal && selectedComplaint && (

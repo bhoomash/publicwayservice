@@ -65,6 +65,17 @@ def ensure_indexes() -> None:
     try:
         _deduplicate_user_emails()
 
+        # Drop old indexes if they exist to avoid conflicts
+        try:
+            users_collection.drop_index("email_1")
+        except:
+            pass  # Index might not exist
+        
+        try:
+            users_collection.drop_index("email_unique")
+        except:
+            pass  # Index might not exist
+
         users_collection.create_index("email", unique=True, name="email_unique")
         users_collection.create_index("role", name="role_idx")
         users_collection.create_index("created_at", name="user_created_idx")
