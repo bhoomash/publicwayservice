@@ -92,7 +92,7 @@ class ComplaintBase(BaseModel):
     description: str
     category: Optional[str] = None
     location: str
-    urgency: str = Field("medium", pattern="^(low|medium|high|urgent)$")
+    urgency: Optional[str] = "medium"
     date_occurred: Optional[date] = None
 
 
@@ -129,7 +129,7 @@ class ComplaintInDB(ComplaintBase):
     rag_color: Optional[str] = None
     rag_emoji: Optional[str] = None
     rag_text_length: Optional[int] = None
-    rag_metadata: Optional[Dict[str, str]] = None
+    rag_metadata: Optional[Dict[str, Any]] = None
     status_history: List[Dict[str, Any]] = Field(default_factory=list)
 
 

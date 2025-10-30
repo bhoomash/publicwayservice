@@ -69,7 +69,7 @@ def ensure_indexes() -> None:
         users_collection.create_index("role", name="role_idx")
         users_collection.create_index("created_at", name="user_created_idx")
 
-        complaints_collection.create_index("id", unique=True, name="complaint_id_unique")
+        complaints_collection.create_index("id", name="complaint_id_idx")
         complaints_collection.create_index("user_id", name="complaint_user_idx")
         complaints_collection.create_index("status", name="complaint_status_idx")
         complaints_collection.create_index([("submitted_date", DESCENDING), ("created_at", DESCENDING)], name="complaint_date_idx")

@@ -77,6 +77,10 @@ def transform_complaint_for_response(complaint_doc: Dict[str, Any]) -> Dict[str,
     document.setdefault("estimated_resolution", "")
     document.setdefault("attachments", [])
 
+    # Normalize urgency to lowercase
+    if document.get("urgency"):
+        document["urgency"] = document["urgency"].lower()
+
     document["submitted_date"] = _ensure_datetime(
         document.get("submitted_date") or document.get("created_at")
     )
@@ -92,6 +96,17 @@ def transform_complaint_for_response(complaint_doc: Dict[str, Any]) -> Dict[str,
         elif isinstance(attachment, AttachmentMeta):
             attachments.append(attachment.dict())
     document["attachments"] = attachments
+
+    # Ensure rag_metadata is properly typed
+    if document.get("rag_metadata") and isinstance(document["rag_metadata"], dict):
+        # Convert any non-string values in metadata to strings where needed
+        metadata = document["rag_metadata"]
+        # Keep rag_text_length as int at top level, not in metadata
+        if "text_length" in metadata and isinstance(metadata["text_length"], int):
+            document["rag_text_length"] = metadata["text_length"]
+            # Remove from metadata to avoid type conflicts
+            metadata = {k: v for k, v in metadata.items() if k != "text_length"}
+            document["rag_metadata"] = metadata
 
     return document
 
