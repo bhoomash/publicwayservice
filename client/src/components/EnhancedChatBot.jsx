@@ -7,7 +7,7 @@ const ChatBot = () => {
     {
       id: 1,
       type: 'bot',
-      message: 'Hello! I\'m GrievanceBot Assistant. I can help you with complaint submissions, status tracking, and general guidance. How can I assist you today?',
+      message: 'Hello! I\'m Public Way Service Assistant. I can help you with complaint submissions, status tracking, and general guidance. How can I assist you today?',
       timestamp: new Date()
     }
   ]);
@@ -205,7 +205,7 @@ Would you like to submit this complaint?`;
 
 Your complaint has been automatically assigned to the **${result.rag_analysis?.department || 'appropriate department'}** and will be processed according to its priority level.
 
-You can track the progress in your "My Complaints" section. You'll receive notifications as updates are made.
+You can track the progress in your "My Complaints" section. You'll receive email updates as progress is made.
 
 Is there anything else I can help you with?`);
 
@@ -282,7 +282,7 @@ Is there anything else I can help you with?`);
             <div className="flex items-center space-x-2">
               <Bot size={20} />
               <div>
-                <h3 className="font-semibold">GrievanceBot Assistant</h3>
+                <h3 className="font-semibold">Public Way Service Assistant</h3>
                 <p className="text-xs text-blue-100">Smart complaint submission</p>
               </div>
             </div>

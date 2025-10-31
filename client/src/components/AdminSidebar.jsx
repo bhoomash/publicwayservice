@@ -52,7 +52,7 @@ const AdminSidebar = ({ sidebarOpen, setSidebarOpen }) => {
           </div>
           <div>
             <h2 className="text-lg font-bold text-gray-800">Admin Panel</h2>
-            <p className="text-xs text-gray-500">Government Portal</p>
+            <p className="text-xs text-gray-500">Public Way Service</p>
           </div>
         </div>
         <button

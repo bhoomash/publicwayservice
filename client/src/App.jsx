@@ -8,7 +8,6 @@ import Dashboard from './pages/Dashboard';
 import CollectorDashboard from './pages/CollectorDashboard';
 import SubmitComplaint from './pages/SubmitComplaint';
 import MyComplaints from './pages/MyComplaints';
-import Notifications from './pages/Notifications';
 import Help from './pages/Help';
 import AdminDashboard from './pages/admin/AdminDashboard';
 import AllComplaints from './pages/admin/AllComplaints';
@@ -137,11 +136,6 @@ function App() {
         <Route path="/my-complaints" element={
           <ProtectedRoute>
             <MyComplaints />
-          </ProtectedRoute>
-        } />
-        <Route path="/notifications" element={
-          <ProtectedRoute>
-            <Notifications />
           </ProtectedRoute>
         } />
         <Route path="/help" element={

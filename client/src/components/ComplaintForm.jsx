@@ -401,7 +401,7 @@ const ComplaintForm = ({ onSubmitSuccess }) => {
           <li>• Your complaint will be automatically categorized and assigned a priority level</li>
           <li>• You'll receive a unique complaint ID for tracking</li>
           <li>• A relevant department will be assigned to handle your case</li>
-          <li>• You'll get notifications about status updates via email and in your dashboard</li>
+          <li>• You'll get updates about status changes via email</li>
           <li>• Expected response time varies by category and urgency level</li>
         </ul>
       </div>

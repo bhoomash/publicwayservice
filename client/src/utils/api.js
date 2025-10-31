@@ -138,12 +138,6 @@ export const authAPI = {
     return response.data;
   },
 
-  // Update notification settings
-  updateNotificationSettings: async (notifications) => {
-    const response = await api.put('/auth/settings/notifications', notifications);
-    return response.data;
-  },
-
   // Update privacy settings
   updatePrivacySettings: async (privacy) => {
     const response = await api.put('/auth/settings/privacy', privacy);
@@ -161,7 +155,28 @@ export const authAPI = {
 export const complaintsAPI = {
   // Submit new complaint
   submitComplaint: async (complaintData) => {
-    const response = await api.post('/complaints/new', complaintData);
+    const formData = new FormData();
+    
+    // Add required fields
+    formData.append('title', complaintData.title || '');
+    formData.append('description', complaintData.description || '');
+    formData.append('location', complaintData.location || '');
+    
+    // Add optional fields
+    if (complaintData.category) formData.append('category', complaintData.category);
+    if (complaintData.urgency) formData.append('urgency', complaintData.urgency);
+    if (complaintData.contactPhone) formData.append('phone', complaintData.contactPhone);
+    if (complaintData.contactEmail) formData.append('email', complaintData.contactEmail);
+    if (complaintData.date_occurred) formData.append('date_occurred', complaintData.date_occurred);
+    
+    // Add attachments if any
+    if (complaintData.attachments && complaintData.attachments.length > 0) {
+      complaintData.attachments.forEach((file) => {
+        formData.append('attachments', file);
+      });
+    }
+    
+    const response = await api.post('/complaints/new', formData);
     return response.data;
   },
 
@@ -251,43 +266,6 @@ export const complaintsAPI = {
     const response = await api.put(`/complaints/${complaintId}/assign`, {
       collector_id: collectorId,
     });
-    return response.data;
-  },
-};
-
-// Notifications API functions
-export const notificationsAPI = {
-  // Get notifications
-  getNotifications: async (filters = {}) => {
-    const params = new URLSearchParams();
-    if (filters.isRead !== undefined) params.append('is_read', filters.isRead);
-    if (filters.limit) params.append('limit', filters.limit);
-    
-    const response = await api.get(`/notifications?${params}`);
-    return response.data;
-  },
-
-  // Mark notification as read
-  markAsRead: async (notificationId) => {
-    const response = await api.put(`/notifications/${notificationId}/read`);
-    return response.data;
-  },
-
-  // Mark all as read
-  markAllAsRead: async () => {
-    const response = await api.put('/notifications/mark-all-read');
-    return response.data;
-  },
-
-  // Delete notification
-  deleteNotification: async (notificationId) => {
-    const response = await api.delete(`/notifications/${notificationId}`);
-    return response.data;
-  },
-
-  // Get unread count
-  getUnreadCount: async () => {
-    const response = await api.get('/notifications/unread-count');
     return response.data;
   },
 };

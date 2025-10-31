@@ -4,11 +4,11 @@ import {
   Home, 
   FileText, 
   ClipboardList, 
-  Bell, 
   HelpCircle, 
   LogOut,
   Menu,
-  X
+  X,
+  User
 } from 'lucide-react';
 
 const Sidebar = ({ isOpen, toggleSidebar, onLogout }) => {
@@ -42,31 +42,25 @@ const Sidebar = ({ isOpen, toggleSidebar, onLogout }) => {
       path: '/dashboard',
       icon: Home,
       label: 'Dashboard',
-      description: 'View complaints summary'
+      description: 'Overview & Statistics'
     },
     {
       path: '/submit-complaint',
       icon: FileText,
       label: 'Submit Complaint',
-      description: 'File a new grievance'
+      description: 'File New Grievance'
     },
     {
       path: '/my-complaints',
       icon: ClipboardList,
       label: 'My Complaints',
-      description: 'Track your complaints'
-    },
-    {
-      path: '/notifications',
-      icon: Bell,
-      label: 'Notifications',
-      description: 'View updates & alerts'
+      description: 'Track Status'
     },
     {
       path: '/help',
       icon: HelpCircle,
-      label: 'Help / FAQs',
-      description: 'Get assistance'
+      label: 'Help & FAQs',
+      description: 'Support Center'
     }
   ];
 
@@ -93,99 +87,92 @@ const Sidebar = ({ isOpen, toggleSidebar, onLogout }) => {
         />
       )}
       
-      {/* Sidebar */}
+      {/* Government Sidebar */}
       <div className={`
-        fixed top-0 left-0 h-full bg-white shadow-lg z-50 
+        fixed top-20 left-0 h-full gov-sidebar z-50 
         transform transition-transform duration-300 ease-in-out
         ${isOpen ? 'translate-x-0' : '-translate-x-full'}
         lg:translate-x-0 lg:static lg:z-auto
-        w-72 border-r border-gray-200
       `}>
         <div className="flex flex-col h-full">
-          {/* Header */}
-          <div className="flex items-center justify-between p-6 border-b border-gray-200">
-            <div className="flex items-center space-x-3">
-              <div className="w-8 h-8 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-lg flex items-center justify-center">
-                <span className="text-white font-bold text-sm">GB</span>
+          {/* Sidebar Header */}
+          <div className="gov-sidebar-header">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-3">
+                <div className="gov-logo">
+                  <span className="text-sm font-bold">PWS</span>
+                </div>
+                <div>
+                  <h2 className="text-base font-semibold gov-text-primary">Public Way Service</h2>
+                  <p className="text-xs gov-text-muted">Service Navigation</p>
+                </div>
               </div>
-              <div>
-                <h1 className="text-lg font-bold text-gray-800">GrievanceBot</h1>
-                <p className="text-xs text-gray-500">Government Portal</p>
-              </div>
+              <button
+                onClick={toggleSidebar}
+                className="lg:hidden p-2 rounded hover:gov-bg-light"
+              >
+                <X size={18} className="gov-text-muted" />
+              </button>
             </div>
-            <button
-              onClick={toggleSidebar}
-              className="lg:hidden p-2 rounded-md hover:bg-gray-100 transition-colors"
-            >
-              <X size={20} className="text-gray-600" />
-            </button>
           </div>
 
-          {/* Navigation */}
-          <nav className="flex-1 py-6 overflow-y-auto">
-            <ul className="space-y-2 px-4">
-              {menuItems.map((item) => {
-                const IconComponent = item.icon;
-                return (
-                  <li key={item.path}>
-                    <NavLink
-                      to={item.path}
-                      onClick={() => {
-                        // Close sidebar on mobile after navigation
-                        if (window.innerWidth < 1024) {
-                          toggleSidebar();
-                        }
-                      }}
-                      className={({ isActive }) => `
-                        flex items-center p-3 rounded-lg transition-all duration-200
-                        hover:bg-blue-50 hover:border-l-4 hover:border-blue-500
-                        ${isActive 
-                          ? 'bg-blue-50 border-l-4 border-blue-500 text-blue-700' 
-                          : 'text-gray-700 hover:text-blue-700'
-                        }
-                      `}
-                    >
-                      {({ isActive }) => (
-                        <>
-                          <IconComponent 
-                            size={20} 
-                            className={`mr-3 ${isActive ? 'text-blue-600' : 'text-gray-500'}`} 
-                          />
-                          <div className="flex-1 min-w-0">
-                            <div className="font-medium truncate">{item.label}</div>
-                            <div className="text-xs text-gray-500 truncate">{item.description}</div>
-                          </div>
-                        </>
-                      )}
-                    </NavLink>
-                  </li>
-                );
-              })}
-            </ul>
+          {/* Navigation Menu */}
+          <nav className="gov-sidebar-nav flex-1 overflow-y-auto">
+            {menuItems.map((item) => {
+              const IconComponent = item.icon;
+              return (
+                <div key={item.path} className="gov-sidebar-item">
+                  <NavLink
+                    to={item.path}
+                    onClick={() => {
+                      // Close sidebar on mobile after navigation
+                      if (window.innerWidth < 1024) {
+                        toggleSidebar();
+                      }
+                    }}
+                    className={({ isActive }) => `
+                      gov-sidebar-link
+                      ${isActive ? 'active' : ''}
+                    `}
+                  >
+                    {({ isActive }) => (
+                      <>
+                        <IconComponent 
+                          size={18} 
+                          className="gov-sidebar-icon"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <div className="gov-sidebar-text">{item.label}</div>
+                          <div className="gov-sidebar-desc">{item.description}</div>
+                        </div>
+                      </>
+                    )}
+                  </NavLink>
+                </div>
+              );
+            })}
           </nav>
 
-          {/* User Info & Logout */}
-          <div className="border-t border-gray-200 p-4">
-            <div className="flex items-center space-x-3 mb-4 p-3 bg-gray-50 rounded-lg">
-              <div className="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center">
-                <span className="text-white font-medium text-sm">
-                  {localStorage.getItem('userEmail')?.charAt(0).toUpperCase() || 'U'}
-                </span>
+          {/* User Info & Actions */}
+          <div className="gov-border-top p-4 gov-bg-light">
+            <div className="flex items-center space-x-3 mb-4 p-3 gov-bg-white rounded gov-border">
+              <div className="w-8 h-8 gov-bg-primary rounded flex items-center justify-center">
+                <User size={14} className="text-white" />
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-gray-700 truncate">
+                <p className="text-sm font-medium gov-text-primary truncate">
                   {localStorage.getItem('userEmail') || 'User'}
                 </p>
-                <p className="text-xs text-gray-500">Citizen</p>
+                <p className="text-xs gov-text-muted">Citizen Account</p>
               </div>
             </div>
             
             <button
               onClick={handleLogout}
-              className="w-full flex items-center p-3 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+              className="w-full flex items-center justify-center space-x-2 p-3 gov-text-danger hover:gov-bg-white gov-border rounded"
             >
-              <LogOut size={20} className="mr-3" />
-              <span className="font-medium">Logout</span>
+              <LogOut size={16} />
+              <span className="font-medium">Sign Out</span>
             </button>
           </div>
         </div>

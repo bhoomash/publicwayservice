@@ -7,7 +7,7 @@ const ChatBot = () => {
     {
       id: 1,
       type: 'bot',
-      message: 'Hello! I\'m GrievanceBot Assistant. How can I help you today?',
+      message: 'Hello! I\'m Public Way Service Assistant. How can I help you today?',
       timestamp: new Date()
     }
   ]);
@@ -51,9 +51,9 @@ const ChatBot = () => {
     } else if (input.includes('how long') || input.includes('time')) {
       return 'Resolution time varies by issue type: Infrastructure (5-7 days), Administrative (10-15 days), Utilities (3-5 days). You\'ll see estimated times for each complaint.';
     } else if (input.includes('email') || input.includes('notification')) {
-      return 'You can manage your notification preferences in the Notifications section. Make sure your email is verified to receive updates.';
+      return 'Make sure your email address is correct in your profile settings to receive important updates about your complaints.';
     } else if (input.includes('help') || input.includes('support')) {
-      return 'For detailed help, visit our Help & FAQs section or contact support at support@grievancebot.gov or call +1-800-HELP.';
+      return 'For detailed help, visit our Help & FAQs section or contact support at support@publicwayservice.gov or call +1-800-HELP.';
     } else {
       return 'I understand you need assistance. For specific help, you can:\n• Check "Help & FAQs" for common questions\n• Visit "My Complaints" to track status\n• Contact support for urgent matters\n\nWhat would you like to know more about?';
     }
@@ -89,7 +89,7 @@ const ChatBot = () => {
             <div className="flex items-center space-x-2">
               <Bot size={20} />
               <div>
-                <h3 className="font-semibold">GrievanceBot Assistant</h3>
+                <h3 className="font-semibold">Public Way Service Assistant</h3>
                 <p className="text-xs text-blue-100">Always here to help</p>
               </div>
             </div>

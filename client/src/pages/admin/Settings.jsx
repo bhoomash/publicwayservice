@@ -16,9 +16,9 @@ import {
 const Settings = () => {
   const [settings, setSettings] = useState({
     general: {
-      siteName: 'GrievanceBot Portal',
-      adminEmail: 'admin@grievancebot.com',
-      supportEmail: 'support@grievancebot.com',
+      siteName: 'Public Way Service Portal',
+      adminEmail: 'admin@publicwayservice.gov',
+      supportEmail: 'support@publicwayservice.gov',
       timezone: 'Asia/Kolkata',
       language: 'en'
     },

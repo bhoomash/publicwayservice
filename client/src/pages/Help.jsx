@@ -53,12 +53,7 @@ const Help = () => {
       question: 'How long does it take to resolve a complaint?',
       answer: 'Resolution time varies depending on the type and complexity of the complaint. Most infrastructure issues are resolved within 5-7 business days, while administrative matters may take 10-15 business days. You\'ll see estimated resolution time for each complaint.'
     },
-    {
-      id: 7,
-      category: 'Technical Support',
-      question: 'I\'m not receiving email notifications. What should I do?',
-      answer: 'Check your spam/junk folder first. Ensure your email address is correct in your profile. You can also update notification preferences in the Notifications section. If the issue persists, contact our support team.'
-    },
+
     {
       id: 8,
       category: 'Complaint Process',

@@ -1,52 +1,89 @@
 @import "tailwindcss";
+@import "./styles/government-theme.css";
 
-/* Custom scrollbar */
+/* Government Portal Base Styles */
+body {
+  font-family: var(--gov-font-primary);
+  background-color: var(--gov-gray-50);
+  color: var(--gov-gray-900);
+  line-height: 1.6;
+}
+
+/* Custom Government Scrollbar */
 ::-webkit-scrollbar {
-  width: 6px;
+  width: 8px;
 }
 
 ::-webkit-scrollbar-track {
-  background: #f1f1f1;
+  background: var(--gov-gray-100);
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #c1c1c1;
-  border-radius: 3px;
+  background: var(--gov-gray-400);
+  border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #a8a8a8;
+  background: var(--gov-gray-500);
 }
 
-/* Smooth transitions for all elements */
-* {
-  transition: color 0.2s ease, background-color 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
-}
-
-/* Focus styles for better accessibility */
+/* Government Focus Styles for Accessibility */
 input:focus,
 button:focus,
-a:focus {
-  outline: 2px solid transparent;
+a:focus,
+select:focus,
+textarea:focus {
+  outline: 2px solid var(--gov-primary);
   outline-offset: 2px;
 }
 
-/* Custom input placeholder styles */
-input::placeholder {
-  color: #9ca3af;
+/* Government Input Placeholder Styles */
+input::placeholder,
+textarea::placeholder {
+  color: var(--gov-gray-500);
   opacity: 1;
 }
 
-/* Smooth hover effects for buttons */
-button {
-  transition: all 0.2s ease-in-out;
+/* Override TailwindCSS with Government Theme */
+.bg-blue-600 { background-color: var(--gov-primary) !important; }
+.bg-blue-700 { background-color: var(--gov-primary-light) !important; }
+.text-blue-600 { color: var(--gov-primary) !important; }
+.border-blue-500 { border-color: var(--gov-primary) !important; }
+.hover\:bg-blue-700:hover { background-color: var(--gov-primary-light) !important; }
+
+/* Remove all animations and gradients */
+*,
+*::before,
+*::after {
+  animation: none !important;
+  transition: none !important;
+  background-image: none !important;
 }
 
-/* Custom animation for form validation errors */
-@keyframes shake {
-  0%, 100% { transform: translateX(0); }
-  25% { transform: translateX(-4px); }
-  75% { transform: translateX(4px); }
+/* Allow only essential hover transitions for better UX */
+button,
+a,
+.nav-link,
+.sidebar-link {
+  transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease !important;
+}
+
+/* Government Card Shadows */
+.shadow-sm { box-shadow: var(--gov-shadow-sm) !important; }
+.shadow { box-shadow: var(--gov-shadow-md) !important; }
+.shadow-lg { box-shadow: var(--gov-shadow-lg) !important; }
+
+/* Government Border Radius */
+.rounded { border-radius: var(--gov-border-radius) !important; }
+.rounded-lg { border-radius: var(--gov-border-radius-lg) !important; }
+
+/* Remove form validation animations */
+@keyframes none {
+  0%, 100% { transform: none; }
+}
+
+.shake {
+  animation: none;
 }
 
 /* Line clamping utility classes */
