@@ -311,10 +311,12 @@ async def submit_complaint(
                 complaints_collection.update_one(
                     {"id": complaint_id},
                     {"$set": {
-                        "document_id": document_id,
-                        "document_type": "uploaded"
+                        "document_id": str(document_id),
+                        "document_type": "uploaded",
+                        "filename": first_attachment.filename
                     }}
                 )
+                print(f"✅ Stored uploaded document for complaint {complaint_id}: {document_id}")
             else:
                 # Generate PDF from form data
                 complaint_data = complaint_document.dict()
@@ -335,13 +337,16 @@ async def submit_complaint(
                 complaints_collection.update_one(
                     {"id": complaint_id},
                     {"$set": {
-                        "document_id": document_id,
+                        "document_id": str(document_id),
                         "document_type": "generated"
                     }}
                 )
+                print(f"✅ Generated and stored PDF document for complaint {complaint_id}: {document_id}")
         except Exception as doc_error:
             # Log error but don't fail the complaint submission
-            print(f"Error storing complaint document: {doc_error}")
+            print(f"❌ Error storing complaint document for {complaint_id}: {doc_error}")
+            import traceback
+            traceback.print_exc()
 
         await create_notification(
             user_id=current_user["user_id"],

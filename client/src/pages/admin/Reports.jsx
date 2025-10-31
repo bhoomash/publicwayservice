@@ -156,8 +156,12 @@ const Reports = () => {
   if (loading) {
     return (
       <Layout title="Reports & Analytics" isAdmin={true}>
-        <div className="flex items-center justify-center min-h-[400px]">
-          <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-600"></div>
+        <div className="flex flex-col items-center justify-center min-h-[400px] space-y-4">
+          <div className="relative">
+            <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-blue-600"></div>
+            <div className="absolute top-0 left-0 animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-blue-300 opacity-30" style={{ animationDirection: 'reverse', animationDuration: '1.5s' }}></div>
+          </div>
+          <p className="text-gray-600 font-medium">Loading reports...</p>
         </div>
       </Layout>
     );

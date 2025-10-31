@@ -1,5 +1,8 @@
-import React, { useState } from 'react';
-import { MessageCircle, X, Send, Bot, User } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { MessageCircle, X, Send, Bot, User, Loader } from 'lucide-react';
+import axios from 'axios';
+
+const API_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000';
 
 const ChatBot = () => {
   const [isOpen, setIsOpen] = useState(false);
@@ -7,12 +10,19 @@ const ChatBot = () => {
     {
       id: 1,
       type: 'bot',
-      message: 'Hello! I\'m Public Way Service Assistant. How can I help you today?',
+      message: 'Hello! I\'m your Government Portal AI Assistant. I can help you with:\n\n• Filing complaints\n• Tracking complaint status\n• Answering questions about services\n• Providing guidance on procedures\n\nHow can I assist you today?',
       timestamp: new Date()
     }
   ]);
   const [inputMessage, setInputMessage] = useState('');
   const [isTyping, setIsTyping] = useState(false);
+  const [error, setError] = useState(null);
+  const messagesEndRef = useRef(null);
+
+  // Auto-scroll to bottom when new messages arrive
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
 
   const handleSendMessage = async () => {
     if (!inputMessage.trim()) return;
@@ -25,45 +35,71 @@ const ChatBot = () => {
     };
 
     setMessages(prev => [...prev, userMessage]);
+    const currentInput = inputMessage;
     setInputMessage('');
     setIsTyping(true);
+    setError(null);
 
-    // Simulate bot response
-    setTimeout(() => {
+    try {
+      // Get auth token
+      const token = localStorage.getItem('token');
+      
+      if (!token) {
+        throw new Error('Please login to use the AI assistant');
+      }
+
+      // Call the chat API
+      const response = await axios.post(
+        `${API_URL}/chat/message`,
+        { message: currentInput },
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+
       const botResponse = {
         id: Date.now() + 1,
         type: 'bot',
-        message: getBotResponse(inputMessage),
+        message: response.data.ai_response || 'I received your message. How else can I help?',
+        timestamp: new Date(response.data.timestamp || new Date())
+      };
+      
+      setMessages(prev => [...prev, botResponse]);
+    } catch (error) {
+      console.error('Chat error:', error);
+      
+      let errorMessage = 'Sorry, I encountered an error. ';
+      
+      if (error.message.includes('login')) {
+        errorMessage += 'Please login to use the AI assistant.';
+      } else if (error.response?.status === 401) {
+        errorMessage += 'Your session has expired. Please login again.';
+      } else {
+        errorMessage += 'Please try again or contact support if the issue persists.';
+      }
+      
+      const errorResponse = {
+        id: Date.now() + 1,
+        type: 'bot',
+        message: errorMessage,
         timestamp: new Date()
       };
-      setMessages(prev => [...prev, botResponse]);
+      
+      setMessages(prev => [...prev, errorResponse]);
+      setError(error.message);
+    } finally {
       setIsTyping(false);
-    }, 1500);
-  };
-
-  const getBotResponse = (userInput) => {
-    const input = userInput.toLowerCase();
-    
-    if (input.includes('status') || input.includes('track')) {
-      return 'You can track your complaint status by visiting the "My Complaints" section. Each complaint shows its current status and updates.';
-    } else if (input.includes('submit') || input.includes('file')) {
-      return 'To submit a new complaint, click on "Submit Complaint" in the sidebar. Fill out the form with details about your issue and attach any relevant documents.';
-    } else if (input.includes('how long') || input.includes('time')) {
-      return 'Resolution time varies by issue type: Infrastructure (5-7 days), Administrative (10-15 days), Utilities (3-5 days). You\'ll see estimated times for each complaint.';
-    } else if (input.includes('email') || input.includes('notification')) {
-      return 'Make sure your email address is correct in your profile settings to receive important updates about your complaints.';
-    } else if (input.includes('help') || input.includes('support')) {
-      return 'For detailed help, visit our Help & FAQs section or contact support at support@publicwayservice.gov or call +1-800-HELP.';
-    } else {
-      return 'I understand you need assistance. For specific help, you can:\n• Check "Help & FAQs" for common questions\n• Visit "My Complaints" to track status\n• Contact support for urgent matters\n\nWhat would you like to know more about?';
     }
   };
 
   const quickQuestions = [
-    'How do I track my complaint?',
-    'How long does resolution take?',
-    'How to submit a complaint?',
-    'Contact support'
+    'How do I track my complaint status?',
+    'I want to file a new complaint',
+    'What is the average resolution time?',
+    'How do I contact support?'
   ];
 
   return (
@@ -89,8 +125,8 @@ const ChatBot = () => {
             <div className="flex items-center space-x-2">
               <Bot size={20} />
               <div>
-                <h3 className="font-semibold">Public Way Service Assistant</h3>
-                <p className="text-xs text-blue-100">Always here to help</p>
+                <h3 className="font-semibold">AI Assistant</h3>
+                <p className="text-xs text-blue-100">Powered by Gemini AI</p>
               </div>
             </div>
             <button
@@ -152,6 +188,7 @@ const ChatBot = () => {
                 </div>
               </div>
             )}
+            <div ref={messagesEndRef} />
           </div>
 
           {/* Quick Questions */}

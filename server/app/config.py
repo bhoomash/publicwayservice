@@ -19,6 +19,11 @@ SMTP_USERNAME = os.getenv("SMTP_USERNAME")
 SMTP_PASSWORD = os.getenv("SMTP_PASSWORD")
 FROM_EMAIL = os.getenv("FROM_EMAIL", SMTP_USERNAME)
 
+# AI API Keys
+GROQ_API_KEY = os.getenv("groq_api_key")
+FIREWORKS_API_KEY = os.getenv("fireworks_api_key")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+
 # OTP Configuration
 OTP_EXPIRE_MINUTES = 10
 OTP_LENGTH = 6
