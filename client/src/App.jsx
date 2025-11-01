@@ -1,5 +1,6 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import ErrorBoundary from './components/ErrorBoundary';
 
 import Login from './pages/Login';
 import Register from './pages/Register';
@@ -109,13 +110,14 @@ const SmartRedirect = () => {
 
 function App() {
   return (
-    <Router>
-      <Routes>
-        {/* Public Routes */}
-        <Route path="/" element={<SmartRedirect />} />
-        <Route path="/login" element={<Login />} />
-        <Route path="/register" element={<Register />} />
-        <Route path="/forgot-password" element={<ForgotPassword />} />
+    <ErrorBoundary>
+      <Router>
+        <Routes>
+          {/* Public Routes */}
+          <Route path="/" element={<SmartRedirect />} />
+          <Route path="/login" element={<Login />} />
+          <Route path="/register" element={<Register />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
 
         {/* Protected Citizen Routes */}
         <Route path="/dashboard" element={
@@ -144,6 +146,11 @@ function App() {
           </ProtectedRoute>
         } />
         <Route path="/complaint/:id" element={
+          <ProtectedRoute>
+            <ComplaintDetails />
+          </ProtectedRoute>
+        } />
+        <Route path="/complaint-details/:id" element={
           <ProtectedRoute>
             <ComplaintDetails />
           </ProtectedRoute>
@@ -185,6 +192,7 @@ function App() {
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Router>
+    </ErrorBoundary>
   );
 }
 

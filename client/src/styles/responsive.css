@@ -1,0 +1,481 @@
+/* ====================================
+   RESPONSIVE DESIGN ENHANCEMENTS
+   Government Portal - User Side
+   ==================================== */
+
+/* ====================================
+   MOBILE-FIRST BREAKPOINTS
+   ==================================== */
+/* xs: 320px - 479px (Extra Small - Mobile Portrait) */
+/* sm: 480px - 767px (Small - Mobile Landscape) */
+/* md: 768px - 1023px (Medium - Tablets) */
+/* lg: 1024px - 1279px (Large - Small Desktops) */
+/* xl: 1280px+ (Extra Large - Large Desktops) */
+
+/* ====================================
+   BASE RESPONSIVE UTILITIES
+   ==================================== */
+
+/* Touch-Friendly Targets (min 44x44px) */
+@media (max-width: 767px) {
+  button,
+  a.gov-btn,
+  .gov-btn {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  /* Larger touch targets for interactive elements */
+  input[type="checkbox"],
+  input[type="radio"] {
+    width: 20px;
+    height: 20px;
+  }
+
+  /* Better tap spacing */
+  .clickable-item {
+    padding: 12px;
+    margin-bottom: 8px;
+  }
+}
+
+/* ====================================
+   TYPOGRAPHY SCALING
+   ==================================== */
+
+/* Mobile Typography */
+@media (max-width: 479px) {
+  h1, .text-3xl { font-size: 1.5rem !important; }
+  h2, .text-2xl { font-size: 1.25rem !important; }
+  h3, .text-xl { font-size: 1.125rem !important; }
+  h4, .text-lg { font-size: 1rem !important; }
+  
+  body { font-size: 14px; }
+}
+
+/* Tablet Typography */
+@media (min-width: 480px) and (max-width: 767px) {
+  h1, .text-3xl { font-size: 1.75rem !important; }
+  h2, .text-2xl { font-size: 1.5rem !important; }
+  h3, .text-xl { font-size: 1.25rem !important; }
+  
+  body { font-size: 15px; }
+}
+
+/* Desktop Typography */
+@media (min-width: 768px) {
+  body { font-size: 16px; }
+}
+
+/* ====================================
+   SPACING & LAYOUT
+   ==================================== */
+
+/* Mobile Spacing Reduction */
+@media (max-width: 767px) {
+  .gov-card {
+    margin-bottom: 1rem;
+  }
+
+  .gov-card-body {
+    padding: 1rem !important;
+  }
+
+  .gov-card-header {
+    padding: 1rem !important;
+  }
+
+  /* Reduce container padding on mobile */
+  .container,
+  .max-w-7xl {
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+
+  /* Stack spacing */
+  .space-y-6 > * + * {
+    margin-top: 1rem !important;
+  }
+
+  .space-y-4 > * + * {
+    margin-top: 0.75rem !important;
+  }
+}
+
+/* ====================================
+   FORM ELEMENTS
+   ==================================== */
+
+/* Mobile Form Improvements */
+@media (max-width: 767px) {
+  input[type="text"],
+  input[type="email"],
+  input[type="password"],
+  input[type="tel"],
+  input[type="number"],
+  select,
+  textarea {
+    font-size: 16px !important; /* Prevent iOS zoom on focus */
+    padding: 0.75rem;
+  }
+
+  /* Stack form labels and inputs */
+  .form-group {
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* Full-width buttons on mobile */
+  .gov-btn:not(.gov-btn-sm) {
+    width: 100%;
+    justify-content: center;
+  }
+
+  /* Better select dropdowns on mobile */
+  select {
+    background-position: right 0.75rem center;
+    padding-right: 2.5rem;
+  }
+}
+
+/* ====================================
+   TABLE RESPONSIVENESS
+   ==================================== */
+
+/* Mobile Tables - Card View */
+@media (max-width: 767px) {
+  .responsive-table {
+    border: 0;
+  }
+
+  .responsive-table thead {
+    display: none;
+  }
+
+  .responsive-table tr {
+    display: block;
+    margin-bottom: 1rem;
+    border: 1px solid var(--gov-gray-300);
+    border-radius: 8px;
+    padding: 1rem;
+    background: white;
+  }
+
+  .responsive-table td {
+    display: flex;
+    justify-content: space-between;
+    padding: 0.5rem 0;
+    border-bottom: 1px solid var(--gov-gray-200);
+  }
+
+  .responsive-table td:last-child {
+    border-bottom: 0;
+  }
+
+  .responsive-table td::before {
+    content: attr(data-label);
+    font-weight: 600;
+    color: var(--gov-gray-700);
+  }
+}
+
+/* ====================================
+   NAVIGATION & SIDEBAR
+   ==================================== */
+
+/* Mobile Navigation */
+@media (max-width: 1023px) {
+  /* Hide desktop sidebar, show mobile menu */
+  .sidebar-desktop {
+    display: none;
+  }
+
+  .mobile-menu {
+    display: block;
+  }
+
+  /* Hamburger menu spacing */
+  .mobile-menu-button {
+    padding: 0.75rem;
+    margin-right: 0.5rem;
+  }
+}
+
+/* Desktop Navigation */
+@media (min-width: 1024px) {
+  .mobile-menu {
+    display: none;
+  }
+
+  .sidebar-desktop {
+    display: block;
+  }
+}
+
+/* ====================================
+   MODAL & OVERLAY
+   ==================================== */
+
+/* Mobile Modal Adjustments */
+@media (max-width: 767px) {
+  .modal-content {
+    width: 95vw !important;
+    max-width: 95vw !important;
+    margin: 0.5rem;
+    max-height: 95vh;
+    overflow-y: auto;
+  }
+
+  .modal-header {
+    padding: 1rem;
+    position: sticky;
+    top: 0;
+    background: white;
+    z-index: 10;
+  }
+
+  .modal-body {
+    padding: 1rem;
+  }
+
+  .modal-footer {
+    padding: 1rem;
+    position: sticky;
+    bottom: 0;
+    background: white;
+    z-index: 10;
+  }
+}
+
+/* ====================================
+   GRID RESPONSIVENESS
+   ==================================== */
+
+/* Responsive Grid Columns */
+@media (max-width: 479px) {
+  .grid-cols-2,
+  .grid-cols-3,
+  .grid-cols-4 {
+    grid-template-columns: repeat(1, minmax(0, 1fr)) !important;
+  }
+}
+
+@media (min-width: 480px) and (max-width: 767px) {
+  .grid-cols-3,
+  .grid-cols-4 {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+}
+
+/* ====================================
+   CARD RESPONSIVENESS
+   ==================================== */
+
+@media (max-width: 767px) {
+  /* Better card stacking on mobile */
+  .gov-card {
+    border-radius: 8px;
+  }
+
+  /* Reduce card shadows on mobile */
+  .gov-card {
+    box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
+  }
+
+  /* Stack card elements vertically */
+  .card-horizontal {
+    flex-direction: column !important;
+  }
+
+  .card-horizontal > * {
+    width: 100% !important;
+  }
+}
+
+/* ====================================
+   IMAGE & MEDIA RESPONSIVENESS
+   ==================================== */
+
+/* Responsive Images */
+img {
+  max-width: 100%;
+  height: auto;
+}
+
+/* Video Containers */
+.video-responsive {
+  position: relative;
+  padding-bottom: 56.25%; /* 16:9 */
+  height: 0;
+  overflow: hidden;
+}
+
+.video-responsive iframe,
+.video-responsive object,
+.video-responsive embed {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+}
+
+/* ====================================
+   UTILITY CLASSES
+   ==================================== */
+
+/* Hide on Mobile */
+@media (max-width: 767px) {
+  .hide-mobile {
+    display: none !important;
+  }
+}
+
+/* Show only on Mobile */
+.show-mobile {
+  display: none !important;
+}
+
+@media (max-width: 767px) {
+  .show-mobile {
+    display: block !important;
+  }
+
+  .show-mobile-flex {
+    display: flex !important;
+  }
+
+  .show-mobile-inline {
+    display: inline !important;
+  }
+}
+
+/* Hide on Tablet */
+@media (min-width: 768px) and (max-width: 1023px) {
+  .hide-tablet {
+    display: none !important;
+  }
+}
+
+/* Hide on Desktop */
+@media (min-width: 1024px) {
+  .hide-desktop {
+    display: none !important;
+  }
+}
+
+/* ====================================
+   TEXT UTILITIES
+   ==================================== */
+
+/* Responsive Text Alignment */
+@media (max-width: 767px) {
+  .text-mobile-center {
+    text-align: center !important;
+  }
+
+  .text-mobile-left {
+    text-align: left !important;
+  }
+}
+
+/* Truncate Text on Mobile */
+@media (max-width: 767px) {
+  .truncate-mobile {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+/* ====================================
+   SCROLL BEHAVIOR
+   ==================================== */
+
+/* Smooth Scrolling */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Better scroll on mobile */
+@media (max-width: 767px) {
+  .overflow-x-auto {
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Horizontal scroll indicators */
+  .scroll-container {
+    scrollbar-width: thin;
+    scrollbar-color: var(--gov-gray-400) var(--gov-gray-100);
+  }
+}
+
+/* ====================================
+   ACCESSIBILITY
+   ==================================== */
+
+/* Focus Visible for Keyboard Navigation */
+:focus-visible {
+  outline: 2px solid var(--gov-primary);
+  outline-offset: 2px;
+}
+
+/* Skip to Main Content Link */
+.skip-link {
+  position: absolute;
+  top: -40px;
+  left: 0;
+  background: var(--gov-primary);
+  color: white;
+  padding: 8px;
+  text-decoration: none;
+  z-index: 100;
+}
+
+.skip-link:focus {
+  top: 0;
+}
+
+/* ====================================
+   PRINT STYLES
+   ==================================== */
+
+@media print {
+  .no-print {
+    display: none !important;
+  }
+
+  .gov-card {
+    page-break-inside: avoid;
+  }
+
+  a[href]:after {
+    content: " (" attr(href) ")";
+  }
+}
+
+/* ====================================
+   LANDSCAPE ORIENTATION
+   ==================================== */
+
+@media (max-width: 767px) and (orientation: landscape) {
+  /* Reduce vertical spacing in landscape */
+  .gov-card-body {
+    padding: 0.75rem !important;
+  }
+
+  .space-y-6 > * + * {
+    margin-top: 0.75rem !important;
+  }
+}
+
+/* ====================================
+   HIGH DPI DISPLAYS
+   ==================================== */
+
+@media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dpi) {
+  /* Sharper borders for retina displays */
+  .gov-border {
+    border-width: 0.5px;
+  }
+}

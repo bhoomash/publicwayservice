@@ -38,18 +38,15 @@ const AdminSidebar = ({ sidebarOpen, setSidebarOpen }) => {
 
   return (
     <aside className={`
-      fixed top-0 left-0 h-full bg-white shadow-lg z-50 
+      fixed top-20 left-0 h-[calc(100vh-5rem)] bg-white shadow-lg z-40 
       transform ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} 
       transition-transform duration-300 ease-in-out
-      lg:translate-x-0 lg:static lg:inset-0
+      lg:translate-x-0 lg:relative lg:top-0 lg:h-full
       w-72 flex flex-col border-r border-gray-200
     `}>
       {/* Sidebar Header */}
       <div className="flex items-center justify-between p-6 border-b border-gray-200">
         <div className="flex items-center space-x-3">
-          <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
-            <Shield className="w-5 h-5 text-white" />
-          </div>
           <div>
             <h2 className="text-lg font-bold text-gray-800">Admin Panel</h2>
             <p className="text-xs text-gray-500">Public Way Service</p>

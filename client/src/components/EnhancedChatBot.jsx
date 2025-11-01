@@ -1,6 +1,9 @@
 import React, { useState } from 'react';
 import { MessageCircle, X, Send, Bot, User, FileText, CheckCircle, Loader2 } from 'lucide-react';
 
+// Get API URL from environment variable
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+
 const ChatBot = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState([
@@ -20,7 +23,7 @@ const ChatBot = () => {
   const sendMessageToAPI = async (message) => {
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch('http://localhost:8001/chat/message', {
+      const response = await fetch(`${API_URL}/chat/message`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -182,7 +185,7 @@ Would you like to submit this complaint?`;
     
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch('http://localhost:8001/chat/submit-guided-complaint', {
+      const response = await fetch(`${API_URL}/chat/submit-guided-complaint`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

@@ -1,8 +1,15 @@
 import axios from 'axios';
 
+// Get API URL from environment variable
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+
 // Create axios instance with base configuration
 const api = axios.create({
-  baseURL: 'http://localhost:8000',
+  baseURL: API_BASE_URL,
+  timeout: 30000, // 30 seconds timeout
+  headers: {
+    'Content-Type': 'application/json',
+  },
 });
 
 // Request interceptor to add auth token
@@ -37,12 +44,35 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
-      // Token expired or invalid
-      localStorage.removeItem('token');
-      localStorage.removeItem('user');
-      localStorage.removeItem('userEmail');
-      window.location.href = '/login';
+    // Handle different error scenarios
+    if (error.response) {
+      // Server responded with error status
+      switch (error.response.status) {
+        case 401:
+          // Token expired or invalid
+          localStorage.removeItem('token');
+          localStorage.removeItem('user');
+          localStorage.removeItem('userEmail');
+          window.location.href = '/login';
+          break;
+        case 403:
+          console.error('Access forbidden:', error.response.data);
+          break;
+        case 404:
+          console.error('Resource not found:', error.config.url);
+          break;
+        case 500:
+          console.error('Server error:', error.response.data);
+          break;
+        default:
+          console.error('API Error:', error.response.data);
+      }
+    } else if (error.request) {
+      // Request made but no response received
+      console.error('Network error: No response from server');
+    } else {
+      // Error in request configuration
+      console.error('Request error:', error.message);
     }
     return Promise.reject(error);
   }

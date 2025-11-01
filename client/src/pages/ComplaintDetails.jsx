@@ -3,6 +3,10 @@ import { useParams, useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import Layout from '../components/Layout';
 import { complaintsAPI, adminAPI } from '../utils/api';
+
+// Get API URL from environment variable
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+
 import { 
   ArrowLeft, 
   User, 
@@ -190,9 +194,15 @@ const ComplaintDetails = () => {
     
     try {
       setIsDeleting(true);
-      await adminAPI.deleteComplaint(complaint.id);
+      await complaintsAPI.deleteComplaint(complaint.id);
       toast.success('Complaint deleted successfully');
-      navigate('/admin/complaints');
+      
+      // Redirect based on user role
+      if (isUserAdmin) {
+        navigate('/admin/complaints');
+      } else {
+        navigate('/my-complaints');
+      }
     } catch (error) {
       console.error('Error deleting complaint:', error);
       toast.error('Failed to delete complaint');
@@ -200,7 +210,7 @@ const ComplaintDetails = () => {
       setIsDeleting(false);
       setShowDeleteModal(false);
     }
-  }, [complaint?.id, navigate]);
+  }, [complaint?.id, navigate, isUserAdmin]);
 
   // Navigate to similar complaint
   const handleSimilarComplaintClick = useCallback((similarId) => {
@@ -260,6 +270,16 @@ const ComplaintDetails = () => {
       </Layout>
     );
   }
+
+  // Check if user is admin
+  const isUserAdmin = useMemo(() => {
+    try {
+      const userData = JSON.parse(localStorage.getItem('user') || '{}');
+      return userData.is_admin === true || userData.role === 'admin';
+    } catch {
+      return false;
+    }
+  }, []);
 
   return (
     <Layout title={`Complaint ${complaint.id}`}>
@@ -366,8 +386,8 @@ const ComplaintDetails = () => {
               )}
             </section>
 
-            {/* AI Processing Status */}
-            {complaint.aiProcessed && (
+            {/* AI Processing Status - Only show if admin or if AI was used */}
+            {complaint.aiProcessed && (isUserAdmin || complaint.ai_response) && (
               <div className="bg-gradient-to-br from-purple-50 to-blue-50 rounded-lg shadow-sm border-2 border-purple-200 p-6">
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="text-lg font-semibold text-gray-800 flex items-center">
@@ -413,8 +433,8 @@ const ComplaintDetails = () => {
               </div>
             )}
 
-            {/* Similar Complaints */}
-            {complaint.similarComplaints && complaint.similarComplaints.length > 0 && (
+            {/* Similar Complaints - Only show to admins */}
+            {isUserAdmin && complaint.similarComplaints && complaint.similarComplaints.length > 0 && (
               <section className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 transition-shadow duration-200 hover:shadow-md">
                 <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
                   <TrendingUp size={20} className="mr-2 text-blue-600" aria-hidden="true" />
@@ -453,8 +473,8 @@ const ComplaintDetails = () => {
               </section>
             )}
 
-            {/* AI Recommendations */}
-            {complaint.aiRecommendations && complaint.aiRecommendations.length > 0 && (
+            {/* AI Recommendations - Only show to admins */}
+            {isUserAdmin && complaint.aiRecommendations && complaint.aiRecommendations.length > 0 && (
               <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
                 <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
                   <Lightbulb size={20} className="mr-2 text-yellow-600" />
@@ -533,71 +553,75 @@ const ComplaintDetails = () => {
             <section className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 transition-shadow duration-200 hover:shadow-md">
               <h3 className="text-lg font-semibold text-gray-800 mb-4">Quick Actions</h3>
               
-              {/* Status Update */}
               <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Update Status
-                  </label>
-                  <select
-                    value={statusUpdate}
-                    onChange={(e) => setStatusUpdate(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-                    disabled={isUpdating}
-                  >
-                    <option value="">Select status...</option>
-                    <option value="Assigned">Assigned</option>
-                    <option value="In Progress">In Progress</option>
-                    <option value="Resolved">Resolved</option>
-                  </select>
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Add Note (Optional)
-                  </label>
-                  <textarea
-                    value={newNote}
-                    onChange={(e) => setNewNote(e.target.value)}
-                    placeholder="Add a note about this status update..."
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-                    rows={3}
-                    disabled={isUpdating}
-                  />
-                </div>
-                
-                <button
-                  onClick={handleStatusUpdate}
-                  disabled={!statusUpdate || isUpdating}
-                  className="w-full bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200 flex items-center justify-center"
-                >
-                  {isUpdating ? (
-                    <>
-                      <Loader2 size={16} className="animate-spin mr-2" />
-                      Updating...
-                    </>
-                  ) : (
-                    'Update Status'
-                  )}
-                </button>
+                {/* Show admin controls only for admins */}
+                {isUserAdmin && (
+                  <>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Update Status
+                      </label>
+                      <select
+                        value={statusUpdate}
+                        onChange={(e) => setStatusUpdate(e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                        disabled={isUpdating}
+                      >
+                        <option value="">Select status...</option>
+                        <option value="Assigned">Assigned</option>
+                        <option value="In Progress">In Progress</option>
+                        <option value="Resolved">Resolved</option>
+                      </select>
+                    </div>
+                    
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Add Note (Optional)
+                      </label>
+                      <textarea
+                        value={newNote}
+                        onChange={(e) => setNewNote(e.target.value)}
+                        placeholder="Add a note about this status update..."
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                        rows={3}
+                        disabled={isUpdating}
+                      />
+                    </div>
+                    
+                    <button
+                      onClick={handleStatusUpdate}
+                      disabled={!statusUpdate || isUpdating}
+                      className="w-full bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200 flex items-center justify-center"
+                    >
+                      {isUpdating ? (
+                        <>
+                          <Loader2 size={16} className="animate-spin mr-2" />
+                          Updating...
+                        </>
+                      ) : (
+                        'Update Status'
+                      )}
+                    </button>
 
-                {/* Add Note Button */}
-                <button
-                  onClick={addNote}
-                  disabled={!newNote || isAddingNote}
-                  className="w-full bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200 flex items-center justify-center"
-                >
-                  {isAddingNote ? (
-                    <>
-                      <Loader2 size={16} className="animate-spin mr-2" />
-                      Adding Note...
-                    </>
-                  ) : (
-                    'Add Note'
-                  )}
-                </button>
+                    {/* Add Note Button */}
+                    <button
+                      onClick={addNote}
+                      disabled={!newNote || isAddingNote}
+                      className="w-full bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200 flex items-center justify-center"
+                    >
+                      {isAddingNote ? (
+                        <>
+                          <Loader2 size={16} className="animate-spin mr-2" />
+                          Adding Note...
+                        </>
+                      ) : (
+                        'Add Note'
+                      )}
+                    </button>
+                  </>
+                )}
 
-                {/* Delete Complaint Button */}
+                {/* Delete Complaint Button - Available to both users and admins */}
                 <button
                   onClick={() => setShowDeleteModal(true)}
                   className="w-full bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors duration-200 flex items-center justify-center"
@@ -605,6 +629,17 @@ const ComplaintDetails = () => {
                   <Trash2 size={16} className="mr-2" />
                   Delete Complaint
                 </button>
+
+                {/* Download Document Button */}
+                {complaint.generatedDocumentId && (
+                  <button
+                    onClick={() => window.open(`${API_URL}/complaints/${complaint.id}/document`, '_blank')}
+                    className="w-full bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors duration-200 flex items-center justify-center"
+                  >
+                    <Download size={16} className="mr-2" />
+                    Download PDF
+                  </button>
+                )}
               </div>
             </section>
 

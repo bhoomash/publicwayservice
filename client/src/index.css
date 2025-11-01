@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @import "./styles/government-theme.css";
+@import "./styles/responsive.css";
 
 /* Government Portal Base Styles */
 body {

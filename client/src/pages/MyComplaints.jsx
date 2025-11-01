@@ -264,39 +264,37 @@ const MyComplaints = () => {
   if (selectedComplaint) {
     return (
       <Layout title="Complaint Details">
-        <div className="max-w-4xl mx-auto">
-          <div className="mb-6">
+        <div className="max-w-4xl mx-auto px-4 sm:px-0">
+          <div className="mb-4 sm:mb-6">
             <button
               onClick={() => setSelectedComplaint(null)}
-              className="text-blue-600 hover:text-blue-700 font-medium"
+              className="text-blue-600 hover:text-blue-700 font-medium text-sm sm:text-base"
             >
               ← Back to My Complaints
             </button>
           </div>
 
           <div className="bg-white rounded-lg shadow-sm border border-gray-200">
-            {/* Header */}
-            <div className="p-6 border-b border-gray-200">
-              <div className="flex items-start justify-between">
-                <div>
-                  <h1 className="text-2xl font-bold text-gray-800 mb-2">{selectedComplaint.title}</h1>
-                  <div className="flex items-center space-x-4 text-sm text-gray-600">
-                    <span>ID: {selectedComplaint.id}</span>
-                    <span className={`px-2 py-1 rounded-full font-medium inline-flex items-center space-x-1 ${getStatusColor(selectedComplaint.status)}`}>
-                      <span className="flex items-center">{getStatusIcon(selectedComplaint.status)}</span>
-                      <span>{selectedComplaint.statusLabel}</span>
-                    </span>
-                    <span className={`px-2 py-1 rounded-full font-medium ${getPriorityColor(selectedComplaint.priority)}`}>
-                      {selectedComplaint.priorityLabel} Priority
-                    </span>
-                  </div>
+            {/* Header - Responsive */}
+            <div className="p-4 sm:p-6 border-b border-gray-200">
+              <div className="flex flex-col space-y-3">
+                <h1 className="text-xl sm:text-2xl font-bold text-gray-800">{selectedComplaint.title}</h1>
+                <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 text-xs sm:text-sm text-gray-600 flex-wrap">
+                  <span className="font-medium">ID: {selectedComplaint.id}</span>
+                  <span className={`px-2 sm:px-3 py-1 rounded-full font-medium inline-flex items-center space-x-1 ${getStatusColor(selectedComplaint.status)} w-fit`}>
+                    <span className="flex items-center">{getStatusIcon(selectedComplaint.status)}</span>
+                    <span>{selectedComplaint.statusLabel}</span>
+                  </span>
+                  <span className={`px-2 py-1 rounded-full font-medium ${getPriorityColor(selectedComplaint.priority)} w-fit`}>
+                    {selectedComplaint.priorityLabel} Priority
+                  </span>
                 </div>
               </div>
             </div>
 
-            {/* Details */}
-            <div className="p-6 space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Details - Responsive Grid */}
+            <div className="p-4 sm:p-6 space-y-4 sm:space-y-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
                 <div>
                   <h3 className="font-semibold text-gray-800 mb-3">Complaint Information</h3>
                   <div className="space-y-3">
@@ -379,18 +377,18 @@ const MyComplaints = () => {
   return (
     <Layout title="My Complaints">
       <div className="space-y-6">
-        {/* Filters */}
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {/* Filters - Responsive */}
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
             {/* Search */}
-            <div className="relative">
-              <Search size={20} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+            <div className="relative sm:col-span-2 lg:col-span-1">
+              <Search size={18} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
               <input
                 type="text"
                 placeholder="Search complaints..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className="w-full pl-10 pr-4 py-2 sm:py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm sm:text-base"
               />
             </div>
 
@@ -399,7 +397,7 @@ const MyComplaints = () => {
               <select
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className="w-full px-3 sm:px-4 py-2 sm:py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm sm:text-base"
               >
                 <option value="all">All Status</option>
                 <option value="pending">Pending</option>
@@ -413,7 +411,7 @@ const MyComplaints = () => {
               <select
                 value={categoryFilter}
                 onChange={(e) => setCategoryFilter(e.target.value)}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className="w-full px-3 sm:px-4 py-2 sm:py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm sm:text-base"
               >
                 <option value="all">All Categories</option>
                 {categories.map(category => (
@@ -424,18 +422,18 @@ const MyComplaints = () => {
           </div>
         </div>
 
-        {/* Complaints List */}
+        {/* Complaints List - Responsive */}
         <div className="bg-white rounded-lg shadow-sm border border-gray-200">
-          <div className="p-6 border-b border-gray-200 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-            <h2 className="text-lg font-semibold text-gray-800">
+          <div className="p-4 sm:p-6 border-b border-gray-200 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <h2 className="text-base sm:text-lg font-semibold text-gray-800">
               Your Complaints ({filteredComplaints.length})
             </h2>
             <div className="flex items-center space-x-3">
               <button
                 onClick={refreshComplaints}
-                className="inline-flex items-center px-3 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
+                className="inline-flex items-center px-3 py-2 bg-blue-600 text-white text-xs sm:text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
               >
-                <Sparkles size={16} className="mr-1" /> Refresh List
+                <Sparkles size={14} className="mr-1" /> Refresh List
               </button>
             </div>
           </div>
@@ -452,79 +450,81 @@ const MyComplaints = () => {
               </p>
             </div>
           ) : (
-            <div className="space-y-4 p-6">
+            <div className="space-y-3 sm:space-y-4 p-4 sm:p-6">
               {filteredComplaints.map((complaint) => (
-                <div key={complaint.id} className="bg-white border-2 border-gray-200 rounded-lg p-6 hover:shadow-lg hover:border-purple-200 transition-all duration-200">
-                  <div className="flex flex-col lg:flex-row lg:items-center justify-between space-y-4 lg:space-y-0">
-                    <div className="flex-1">
-                      <div className="flex flex-col sm:flex-row sm:items-start justify-between mb-3">
-                        <div className="flex items-center">
-                          <h3 className="text-lg font-semibold text-gray-800 mb-2 sm:mb-0">{complaint.title}</h3>
-                          {/* AI Processed Badge */}
-                          <span className="ml-3 px-2 py-1 bg-gradient-to-r from-purple-100 to-blue-100 text-purple-700 rounded-full text-xs font-medium flex items-center">
-                            <Brain size={12} className="mr-1" />
-                            AI Processed
-                          </span>
-                        </div>
-                        <div className="flex items-center space-x-2">
-                          <span className={`px-3 py-1 rounded-full text-xs font-medium flex items-center ${getStatusColor(complaint.status)}`}>
-                            {getStatusIcon(complaint.status)}
-                            <span className="ml-1">{complaint.statusLabel}</span>
-                          </span>
-                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${getPriorityColor(complaint.priority)}`}>
-                            {complaint.priorityLabel}
-                          </span>
-                        </div>
+                <div key={complaint.id} className="bg-white border-2 border-gray-200 rounded-lg p-4 sm:p-6 hover:shadow-lg hover:border-purple-200 transition-all duration-200">
+                  <div className="flex flex-col space-y-3 sm:space-y-4">
+                    {/* Header Section - Mobile Optimized */}
+                    <div className="flex flex-col space-y-2">
+                      <div className="flex items-start justify-between gap-2">
+                        <h3 className="text-base sm:text-lg font-semibold text-gray-800 flex-1 min-w-0">{complaint.title}</h3>
+                        {/* AI Badge - Hidden on very small screens */}
+                        <span className="hidden xs:flex px-2 py-1 bg-gradient-to-r from-purple-100 to-blue-100 text-purple-700 rounded-full text-xs font-medium items-center flex-shrink-0">
+                          <Brain size={12} className="mr-1" />
+                          AI
+                        </span>
                       </div>
                       
-                      <p className="text-gray-600 mb-4 line-clamp-2">{complaint.description}</p>
-                      
-                      {/* AI Insights Bar */}
-                      <div className="bg-gradient-to-r from-purple-50 to-blue-50 border border-purple-200 rounded-lg p-3 mb-4">
-                        <div className="flex items-center text-sm">
-                          <Sparkles size={14} className="text-purple-600 mr-2" />
-                          <span className="text-gray-700 font-medium mr-2">AI Analysis:</span>
-                          <span className="text-gray-600">Auto-assigned to {complaint.assignedTo}</span>
-                          {complaint.vectorDbId && (
-                            <span className="ml-auto text-xs text-gray-500 flex items-center">
-                              <Database size={12} className="mr-1" />
-                              Vector DB
-                            </span>
-                          )}
-                        </div>
+                      {/* Status Badges - Stack on mobile */}
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className={`px-2 sm:px-3 py-1 rounded-full text-xs font-medium flex items-center ${getStatusColor(complaint.status)}`}>
+                          {getStatusIcon(complaint.status)}
+                          <span className="ml-1">{complaint.statusLabel}</span>
+                        </span>
+                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${getPriorityColor(complaint.priority)}`}>
+                          {complaint.priorityLabel}
+                        </span>
                       </div>
-                      
-                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-sm text-gray-500 mb-4">
-                        <div className="flex items-center">
-                          <span className="font-medium">ID:</span>
-                          <span className="ml-1">{complaint.id}</span>
-                        </div>
-                        <div className="flex items-center">
-                          <span className="font-medium">Category:</span>
-                          <span className="ml-1">{complaint.category}</span>
-                        </div>
-                        <div className="flex items-center">
-                          <span className="font-medium">Submitted:</span>
-                          <span className="ml-1">{formatDate(complaint.submittedDate)}</span>
-                        </div>
-                        <div className="flex items-center">
-                          <span className="font-medium">Updated:</span>
-                          <span className="ml-1">{formatDate(complaint.lastUpdated)}</span>
-                        </div>
-                        <div className="flex items-center">
-                          <span className="font-medium">Priority Score:</span>
-                          <span className="ml-1">{complaint.priorityScore}</span>
-                        </div>
-                      </div>
-                      
-                      <button
-                        onClick={() => setSelectedComplaint(complaint)}
-                        className="inline-flex items-center text-blue-600 hover:text-blue-700 font-medium text-sm bg-blue-50 hover:bg-blue-100 px-3 py-2 rounded-lg transition-colors"
-                      >
-                        <Eye size={16} className="mr-1" />
-                        View Details
-                      </button>
                     </div>
+                    
+                    {/* Description */}
+                    <p className="text-sm sm:text-base text-gray-600 line-clamp-2">{complaint.description}</p>
+                    
+                    {/* AI Insights Bar - Responsive */}
+                    <div className="bg-gradient-to-r from-purple-50 to-blue-50 border border-purple-200 rounded-lg p-2 sm:p-3">
+                      <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-0 text-xs sm:text-sm">
+                        <div className="flex items-center flex-1 min-w-0">
+                          <Sparkles size={12} className="text-purple-600 mr-1 sm:mr-2 flex-shrink-0" />
+                          <span className="text-gray-700 font-medium mr-1 sm:mr-2 flex-shrink-0">AI:</span>
+                          <span className="text-gray-600 truncate">{complaint.assignedTo}</span>
+                        </div>
+                        {complaint.vectorDbId && (
+                          <span className="text-xs text-gray-500 flex items-center">
+                            <Database size={10} className="mr-1" />
+                            Vector DB
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    
+                    {/* Details Grid - Responsive */}
+                    <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3 text-xs sm:text-sm text-gray-500">
+                      <div className="flex flex-col sm:flex-row sm:items-center">
+                        <span className="font-medium">ID:</span>
+                        <span className="sm:ml-1 truncate">{complaint.id}</span>
+                      </div>
+                      <div className="flex flex-col sm:flex-row sm:items-center">
+                        <span className="font-medium">Category:</span>
+                        <span className="sm:ml-1 truncate">{complaint.category}</span>
+                      </div>
+                      <div className="flex flex-col sm:flex-row sm:items-center">
+                        <span className="font-medium">Submitted:</span>
+                        <span className="sm:ml-1">{formatDate(complaint.submittedDate)}</span>
+                      </div>
+                      <div className="flex flex-col sm:flex-row sm:items-center">
+                        <span className="font-medium">Score:</span>
+                        <span className="sm:ml-1">{complaint.priorityScore}</span>
+                      </div>
+                    </div>
+                    
+                    {/* View Details Button */}
+                    <button
+                      onClick={() => setSelectedComplaint(complaint)}
+                      className="inline-flex items-center justify-center sm:justify-start text-blue-600 hover:text-blue-700 font-medium text-sm bg-blue-50 hover:bg-blue-100 px-3 py-2 rounded-lg transition-colors w-full sm:w-auto"
+                    >
+                      <Eye size={16} className="mr-1" />
+                      View Details
+                    </button>
                   </div>
                 </div>
               ))}

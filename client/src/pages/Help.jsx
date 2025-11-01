@@ -117,15 +117,7 @@ const Help = () => {
     <Layout title="Help & FAQs">
       <div className="space-y-8">
         {/* Header */}
-        <div className="bg-gradient-to-r from-blue-600 to-blue-700 rounded-lg p-8 text-white">
-          <div className="flex items-center mb-4">
-            <HelpCircle size={32} className="mr-3" />
-            <h1 className="text-3xl font-bold">Help & Support</h1>
-          </div>
-          <p className="text-blue-100 text-lg">
-            Find answers to common questions or get in touch with our support team
-          </p>
-        </div>
+       
 
         {/* Search */}
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">

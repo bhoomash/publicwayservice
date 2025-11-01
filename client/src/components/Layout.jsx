@@ -66,40 +66,44 @@ const Layout = ({ children, title = "Dashboard", isAdmin = false }) => {
     : userName.charAt(0).toUpperCase();
 
   return (
-    <div className="h-screen flex gov-bg-light overflow-hidden">
-      {/* Government Header Bar */}
-      <div className="fixed top-0 left-0 right-0 z-50 gov-header">
-        <div className="gov-container">
-          <div className="gov-header-brand">
-            <div className="gov-logo">
-              <span className="text-lg font-bold">PWS</span>
-            </div>
-            <div>
-              <h1 className="gov-title">Public Way Service</h1>
-              <p className="gov-subtitle">Digital Grievance Management System</p>
-            </div>
-            <div className="ml-auto flex items-center space-x-4">
+    <div className="h-screen flex flex-col gov-bg-light overflow-hidden">
+      {/* Government Header Bar - White with Dark Blue Text */}
+      <div className="fixed top-0 left-0 right-0 z-50 bg-white border-b-2 border-blue-900 shadow-sm h-20">
+        <div className="gov-container px-3 sm:px-4 h-full">
+          <div className="flex items-center justify-between h-full">
+            {/* Mobile: Menu button first */}
+            <div className="flex lg:hidden items-center order-1">
               <button
                 onClick={toggleSidebar}
-                className="lg:hidden p-2 rounded text-white hover:bg-white hover:bg-opacity-20"
+                className="p-2 rounded text-blue-900 hover:bg-blue-50 flex-shrink-0"
+                aria-label="Toggle menu"
               >
                 <Menu size={20} />
               </button>
-              
-              {/* User Dropdown Menu - Moved to Dark Blue Header */}
-              <div className="relative">
+            </div>
+            
+            {/* Title - centered on mobile, left on desktop */}
+            <div className="flex-1 min-w-0 order-2 text-center lg:text-left">
+              <h1 className="text-sm sm:text-base lg:text-xl font-bold text-blue-900 truncate">Public Way Service</h1>
+              <p className="text-xs text-gray-600 hidden sm:block">Digital Grievance Management System</p>
+            </div>
+            
+            {/* User Dropdown Menu - Shows on both mobile and desktop */}
+            <div className="flex items-center order-3">
+              <div className="relative flex-shrink-0">
                 <button
                   onClick={() => setUserMenuOpen(!userMenuOpen)}
-                  className="flex items-center space-x-2 p-2 rounded text-white"
+                  className="flex items-center space-x-1 lg:space-x-2 p-1.5 lg:p-2 rounded text-blue-900 hover:bg-blue-50"
+                  aria-label="User menu"
                 >
-                  <div className="w-8 h-8 bg-white bg-opacity-20 rounded flex items-center justify-center">
+                  <div className="w-8 h-8 bg-blue-900 text-white rounded flex items-center justify-center flex-shrink-0">
                     <span className="font-medium text-sm">{userInitials}</span>
                   </div>
-                  <div className="hidden md:block text-left">
-                    <p className="font-medium text-sm">{userName}</p>
-                    <p className="opacity-80 text-xs">{isAdmin ? "Administrator" : "Citizen"}</p>
+                  <div className="hidden lg:block text-left">
+                    <p className="font-medium text-sm text-blue-900 truncate max-w-[120px]">{userName}</p>
+                    <p className="text-xs text-gray-600">{isAdmin ? "Administrator" : "Citizen"}</p>
                   </div>
-                  <ChevronDown size={14} className="text-white opacity-80" />
+                  <ChevronDown size={14} className="text-blue-900" />
                 </button>
                 
                 {/* Dropdown Menu */}
@@ -150,42 +154,24 @@ const Layout = ({ children, title = "Dashboard", isAdmin = false }) => {
         </div>
       </div>
 
-      {/* Conditional Sidebar */}
-      {isAdmin ? (
-        <AdminSidebar 
-          sidebarOpen={sidebarOpen} 
-          setSidebarOpen={setSidebarOpen}
-        />
-      ) : (
-        <Sidebar 
-          isOpen={sidebarOpen} 
-          toggleSidebar={toggleSidebar}
-          onLogout={handleLogout}
-        />
-      )}
+      {/* Main Layout with Sidebar and Content */}
+      <div className="flex flex-1 pt-20 overflow-hidden">
+        {/* Conditional Sidebar */}
+        {isAdmin ? (
+          <AdminSidebar 
+            sidebarOpen={sidebarOpen} 
+            setSidebarOpen={setSidebarOpen}
+          />
+        ) : (
+          <Sidebar 
+            isOpen={sidebarOpen} 
+            toggleSidebar={toggleSidebar}
+            onLogout={handleLogout}
+          />
+        )}
 
-      {/* Main Content Area */}
-      <div className="flex-1 flex flex-col lg:ml-0 h-full pt-20">
-        {/* Sub-header with page title and actions */}
-        <header className="gov-bg-white px-4 sm:px-6 lg:px-8 py-4 flex-shrink-0 gov-border-bottom">
-          <div className="flex items-center justify-between">
-            {/* Left side - Page title */}
-            <div className="flex items-center space-x-3">
-              <div>
-                <h2 className="text-xl font-semibold gov-text-primary">{title}</h2>
-                <p className="text-sm gov-text-muted hidden sm:block">
-                  {isAdmin ? "Administrative Control Panel" : "Public Way Service Portal"}
-                </p>
-              </div>
-            </div>
-
-            {/* Right side - Actions (User menu moved to header) */}
-            <div className="flex items-center space-x-3">
-              {/* User menu has been moved to the dark blue header above */}
-            </div>
-          </div>
-        </header>
-
+        {/* Main Content Area */}
+        <div className="flex-1 flex flex-col h-full overflow-hidden">
         {/* Main Content - All content including footer scrolls together */}
         <main className="flex-1 overflow-y-auto">
           <div className="p-4 sm:p-6 max-w-7xl mx-auto">
@@ -196,17 +182,18 @@ const Layout = ({ children, title = "Dashboard", isAdmin = false }) => {
           <Footer />
         </main>
       </div>
-      
+
       {/* Mobile sidebar overlay */}
       {sidebarOpen && (
         <div
-          className="fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden"
+          className="fixed inset-0 bg-black bg-opacity-50 z-30 lg:hidden"
           onClick={toggleSidebar}
         />
       )}
       
       {/* ChatBot - Only show for non-admin users */}
       {!isAdmin && <ChatBot />}
+      </div>
     </div>
   );
 };

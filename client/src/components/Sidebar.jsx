@@ -79,29 +79,18 @@ const Sidebar = ({ isOpen, toggleSidebar, onLogout }) => {
 
   return (
     <>
-      {/* Mobile overlay */}
-      {isOpen && (
-        <div 
-          className="fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden"
-          onClick={toggleSidebar}
-        />
-      )}
-      
       {/* Government Sidebar */}
       <div className={`
-        fixed top-20 left-0 h-full gov-sidebar z-50 
+        fixed top-20 left-0 h-[calc(100vh-5rem)] gov-sidebar z-40 
         transform transition-transform duration-300 ease-in-out
         ${isOpen ? 'translate-x-0' : '-translate-x-full'}
-        lg:translate-x-0 lg:static lg:z-auto
+        lg:translate-x-0 lg:relative lg:top-0 lg:h-full lg:z-auto
       `}>
         <div className="flex flex-col h-full">
           {/* Sidebar Header */}
           <div className="gov-sidebar-header">
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-3">
-                <div className="gov-logo">
-                  <span className="text-sm font-bold">PWS</span>
-                </div>
                 <div>
                   <h2 className="text-base font-semibold gov-text-primary">Public Way Service</h2>
                   <p className="text-xs gov-text-muted">Service Navigation</p>

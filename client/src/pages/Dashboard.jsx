@@ -168,43 +168,34 @@ const Dashboard = () => {
   return (
     <Layout title="Citizen Dashboard">
       <div className="space-y-6">
-        {/* Government Header Section */}
+        {/* Government Header Section - Responsive */}
         <div className="gov-card gov-bg-primary text-white">
           <div className="gov-card-body">
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="text-xl font-semibold mb-2">Public Way Service Portal</h2>
-                <p className="opacity-90 text-sm">
-                  Digital platform for efficient complaint submission and tracking
-                </p>
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+              <div className="flex-1">
+                <h2 className="text-lg sm:text-xl lg:text-2xl font-semibold">Public Way Service Portal</h2>
                 {lastUpdated && (
                   <p className="text-xs opacity-75 mt-2">
                     Last updated: {lastUpdated.toLocaleTimeString()}
                   </p>
                 )}
               </div>
-              <div className="flex flex-col items-end space-y-3">
-                <div className="flex items-center space-x-2">
-                  <div className="w-8 h-8 bg-white bg-opacity-20 rounded flex items-center justify-center">
-                    <FileText size={16} />
-                  </div>
-                  <span className="text-sm opacity-90">Secure Portal</span>
-                </div>
+              <div className="flex flex-row md:flex-col items-center md:items-end gap-3">
                 <button 
                   onClick={() => fetchUserStats(false)} 
-                  className="gov-btn gov-btn-secondary gov-btn-sm"
+                  className="gov-btn gov-btn-secondary gov-btn-sm whitespace-nowrap"
                   disabled={loading}
                   aria-label="Refresh dashboard data"
                 >
                   {loading ? (
                     <>
                       <Loader2 size={14} className="animate-spin" />
-                      Updating...
+                      <span className="hidden sm:inline">Updating...</span>
                     </>
                   ) : (
                     <>
                       <RefreshCcw size={14} />
-                      Refresh
+                      <span className="hidden sm:inline">Refresh</span>
                     </>
                   )}
                 </button>
@@ -231,38 +222,29 @@ const Dashboard = () => {
                   ))
                 ) : recentComplaints.length > 0 ? (
                   recentComplaints.map((complaint) => (
-                    <div key={complaint.id || complaint._id} className="gov-border p-4 rounded gov-bg-light">
-                      <div className="flex items-center justify-between mb-2">
-                        <div className="flex items-center space-x-2">
-                          <h4 className="font-medium gov-text-primary">{complaint.title}</h4>
+                    <div key={complaint.id || complaint._id} className="gov-border p-3 sm:p-4 rounded gov-bg-light">
+                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-2">
+                        <div className="flex items-center space-x-2 flex-1 min-w-0">
+                          <h4 className="font-medium gov-text-primary truncate text-sm sm:text-base">{complaint.title}</h4>
                         </div>
-                        <div className="flex items-center space-x-2">
-                          <span className={`gov-status ${getStatusBadge(complaint.status)}`}>
+                        <div className="flex items-center space-x-2 flex-shrink-0">
+                          <span className={`gov-status ${getStatusBadge(complaint.status)} text-xs sm:text-sm`}>
                             {complaint.status}
                           </span>
                           {complaint.priorityScore && (
-                            <span className={`text-sm font-bold ${getPriorityColor(complaint.priorityScore)}`}>
+                            <span className={`text-xs sm:text-sm font-bold ${getPriorityColor(complaint.priorityScore)}`}>
                               {complaint.priorityScore}
                             </span>
                           )}
                         </div>
                       </div>
-                      <div className="flex items-center text-sm gov-text-muted space-x-4 mb-3">
+                      <div className="flex flex-col sm:flex-row sm:items-center text-xs sm:text-sm gov-text-muted gap-2 sm:gap-4">
                         <span className="font-medium">ID: {complaint.id || complaint._id}</span>
-                        <span>{complaint.category || 'General'}</span>
+                        <span className="hidden sm:inline">{complaint.category || 'General'}</span>
                         <span className="flex items-center">
                           <Calendar size={12} className="mr-1" />
                           {new Date(complaint.date || complaint.created_at).toLocaleDateString()}
                         </span>
-                      </div>
-                      <div className="flex justify-end">
-                        <button
-                          onClick={() => navigate(`/complaint-details/${complaint.id || complaint._id}`)}
-                          className="gov-btn gov-btn-outline gov-btn-sm"
-                        >
-                          <Eye size={14} />
-                          View Details
-                        </button>
                       </div>
                     </div>
                   ))
@@ -308,48 +290,48 @@ const Dashboard = () => {
               <div className="space-y-4">
                 <button 
                   onClick={() => handleQuickAction('submit')}
-                  className="w-full p-4 text-left gov-bg-light hover:gov-bg-white gov-border rounded transition-colors group"
+                  className="w-full p-3 sm:p-4 text-left gov-bg-light hover:gov-bg-white gov-border rounded transition-colors group"
                   aria-label="Submit new complaint"
                 >
                   <div className="flex items-center">
-                    <div className="p-2 gov-bg-primary text-white rounded mr-3 group-hover:gov-bg-primary-light">
+                    <div className="p-2 gov-bg-primary text-white rounded mr-3 group-hover:gov-bg-primary-light flex-shrink-0">
                       <Plus size={18} />
                     </div>
-                    <div>
-                      <h4 className="font-medium gov-text-primary">Submit New Complaint</h4>
-                      <p className="text-sm gov-text-muted">File a new grievance or service request</p>
+                    <div className="flex-1 min-w-0">
+                      <h4 className="font-medium gov-text-primary text-sm sm:text-base">Submit New Complaint</h4>
+                      <p className="text-xs sm:text-sm gov-text-muted truncate">File a new grievance or service request</p>
                     </div>
                   </div>
                 </button>
                 
                 <button 
                   onClick={() => handleQuickAction('track')}
-                  className="w-full p-4 text-left gov-bg-light hover:gov-bg-white gov-border rounded transition-colors group"
+                  className="w-full p-3 sm:p-4 text-left gov-bg-light hover:gov-bg-white gov-border rounded transition-colors group"
                   aria-label="Track your complaints"
                 >
                   <div className="flex items-center">
-                    <div className="p-2 bg-green-600 text-white rounded mr-3 group-hover:bg-green-700">
+                    <div className="p-2 bg-green-600 text-white rounded mr-3 group-hover:bg-green-700 flex-shrink-0">
                       <BarChart3 size={18} />
                     </div>
-                    <div>
-                      <h4 className="font-medium gov-text-primary">Track Complaints</h4>
-                      <p className="text-sm gov-text-muted">Monitor progress and status updates</p>
+                    <div className="flex-1 min-w-0">
+                      <h4 className="font-medium gov-text-primary text-sm sm:text-base">Track Complaints</h4>
+                      <p className="text-xs sm:text-sm gov-text-muted truncate">Monitor progress and status updates</p>
                     </div>
                   </div>
                 </button>
                 
                 <button 
                   onClick={() => handleQuickAction('help')}
-                  className="w-full p-4 text-left gov-bg-light hover:gov-bg-white gov-border rounded transition-colors group"
+                  className="w-full p-3 sm:p-4 text-left gov-bg-light hover:gov-bg-white gov-border rounded transition-colors group"
                   aria-label="Get help and support"
                 >
                   <div className="flex items-center">
-                    <div className="p-2 bg-blue-600 text-white rounded mr-3 group-hover:bg-blue-700">
+                    <div className="p-2 bg-blue-600 text-white rounded mr-3 group-hover:bg-blue-700 flex-shrink-0">
                       <Users size={18} />
                     </div>
-                    <div>
-                      <h4 className="font-medium gov-text-primary">Help & Support</h4>
-                      <p className="text-sm gov-text-muted">Guidelines, FAQs and assistance</p>
+                    <div className="flex-1 min-w-0">
+                      <h4 className="font-medium gov-text-primary text-sm sm:text-base">Help & Support</h4>
+                      <p className="text-xs sm:text-sm gov-text-muted truncate">Guidelines, FAQs and assistance</p>
                     </div>
                   </div>
                 </button>
